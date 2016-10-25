@@ -1,0 +1,35 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": ["/usr/include"],
+            "browse" : {
+                "limitSymbolsToIncludedHeaders" : true,
+                "databaseFilename" : ""
+            }
+        },
+        {
+            "name": "Linux",
+            "includePath": ["/usr/include"],
+            "browse" : {
+                "limitSymbolsToIncludedHeaders" : true,
+                "databaseFilename" : ""
+            }
+        },
+        {
+            "name": "Win32",
+            "includePath": [
+                "../esp-open-rtos/include",
+                "../esp-open-rtos/libc/xtensa-lx106-elf/include",
+                "../esp-open-rtos/core/include",
+                "../esp-open-rtos/FreeRTOS/Source/include",
+                "../esp-open-rtos/extras/mbedtls/mbedtls/include",
+                "../esp-open-rtos/lwip/lwip/src/include/lwip"
+            ],
+            "browse" : {
+                "limitSymbolsToIncludedHeaders" : true,
+                "databaseFilename" : ""
+            }
+        }
+    ]
+}
