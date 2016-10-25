@@ -35,6 +35,8 @@
 
 #include "ssid_config.h"
 
+#include "config.h"
+
 /* Server cert & key */
 extern const char *server_cert;
 extern const char *server_key;
@@ -57,67 +59,9 @@ extern const char *server_key;
 #include "mbedtls/timing.h"
 #include "mbedtls/ssl_cookie.h"
 
-#define DEBUG_LEVEL 1
+#include "app/app_timer.h"
 
 #define PORT "800"
-#define MAX_TIMERS 10
-
-typedef struct{
-    volatile uint32_t r_value;
-    volatile uint32_t int_ms;
-    volatile uint32_t fin_ms;
-} timer_context;
-
-static timer_context *timers[MAX_TIMERS] = {0};
-
-static void frc1_interrupt_handler(void){
-    int i;
-    timer_context *tPtr;
-    for(i=0;i<MAX_TIMERS;i++){
-        tPtr = timers[i]; 
-        if(tPtr==NULL)
-            continue;
-        if(tPtr->r_value < UINT_MAX)
-            tPtr->r_value++;
-    }
-}
-
-static void timer_set_delay(void *data, uint32_t int_ms, uint32_t fin_ms ){
-    // Assume our timer_context type is used for data
-    timer_context *ctx = data;
-    size_t i;
-
-    ctx->int_ms = int_ms;
-    ctx->fin_ms = fin_ms;
-    ctx->r_value = 0;
-
-    for(i=0;i<MAX_TIMERS;i++)
-        if(timers[i] == ctx || timers[i] == NULL)
-            break;
-    if(timers[i]==NULL)
-        timers[i] = ctx;
-}
-
-static int timer_get_delay(void *data){
-    // Assume our timer_context type is used for data
-    timer_context *ctx = data;
-    size_t i;
-    for(i=0;i<MAX_TIMERS;i++)
-        if(timers[i] == ctx || timers[i] == NULL)
-            break;
-
-    if(ctx->fin_ms==0){
-        timers[i] = NULL;
-        return -1;
-    }
-    if(ctx->r_value >= ctx->fin_ms){
-        timers[i] = NULL;
-        return 2;
-    }
-    if(ctx->r_value >= ctx->int_ms)
-        return 1;
-    return 0;
-}
 
 static void my_debug( void *ctx, int level,
                       const char *file, int line,
@@ -146,7 +90,7 @@ void tls_server_task(void *pvParameters)
 
     // DTLS Specific stuff
     mbedtls_ssl_cookie_ctx cookie_ctx;
-    timer_context timer_ctx;
+    app_timer_context timer_ctx;
 
     unsigned char client_ip[16];
     size_t cliip_len;
@@ -214,7 +158,7 @@ void tls_server_task(void *pvParameters)
         goto exit;
     }
 
-    mbedtls_ssl_set_timer_cb(&ssl, &timer_ctx, timer_set_delay, timer_get_delay);
+    mbedtls_ssl_set_timer_cb(&ssl, &timer_ctx, app_timer_set_delay, app_timer_get_delay);
 
     printf(" ok\n");
 
@@ -349,15 +293,6 @@ void user_init(void)
 {
     uart_set_baud(0, 115200);
     printf("SDK version:%s\n", sdk_system_get_sdk_version());
-
-    timer_set_interrupts(FRC1, false);
-    timer_set_run(FRC1, false);
-    // set up ISRs
-    _xt_isr_attach(INUM_TIMER_FRC1, frc1_interrupt_handler);
-    timer_set_frequency(FRC1, 1000);
-
-    timer_set_interrupts(FRC1, true);
-    timer_set_run(FRC1, true);
 
     struct sdk_station_config config = {
         .ssid = WIFI_SSID,
