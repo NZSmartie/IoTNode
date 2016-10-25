@@ -57,7 +57,7 @@ extern const char *server_key;
 #include "mbedtls/timing.h"
 #include "mbedtls/ssl_cookie.h"
 
-#define DEBUG_LEVEL 4
+#define DEBUG_LEVEL 1
 
 #define PORT "800"
 #define MAX_TIMERS 10
