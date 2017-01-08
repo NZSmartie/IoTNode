@@ -6,3 +6,9 @@
 # in the build directory. This behaviour is entirely configurable,
 # please read the ESP-IDF documents if you need to do this.
 #
+
+SHELL := /bin/bash
+SECRETS := ${COMPONENT_PATH}/secrets
+SECRETS := $(shell cat ${SECRETS} | sed -r 's/^\#.*$$//g; s/^([^=]+)$$/ -D\1/m; s/^([^=]+=)(.*)$$/ -D\1"\2"/' | tr -d '\n')
+
+CFLAGS += $(SECRETS)

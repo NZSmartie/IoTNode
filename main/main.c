@@ -6,8 +6,28 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 
+static bool connected = false;
+
+#define STRING2(x) #x
+#define STRING(x) STRING2(x)
+
+#if !defined( WIFI_SSID ) || !defined( WIFI_PASSWORD )
+    #error WIFI_SSID or WIFI_PASSWORD not set in secrets file. See secrets.example
+#endif
+
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
+    switch ( event->event_id )
+    {
+        case SYSTEM_EVENT_STA_CONNECTED:
+            connected = true;
+            break;
+        case SYSTEM_EVENT_STA_DISCONNECTED:
+            connected = false;
+            break;
+        default:
+            break;
+    }
     return ESP_OK;
 }
 
@@ -22,8 +42,8 @@ void app_main(void)
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
     wifi_config_t sta_config = {
         .sta = {
-            .ssid = "access_point_name",
-            .password = "password",
+            .ssid = STRING( WIFI_SSID ),
+            .password = STRING( WIFI_PASSWORD ),
             .bssid_set = false
         }
     };
@@ -36,7 +56,11 @@ void app_main(void)
     while (true) {
         gpio_set_level(GPIO_NUM_4, level);
         level = !level;
-        vTaskDelay(300 / portTICK_PERIOD_MS);
+
+        if ( connected )
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        else
+            vTaskDelay(250 / portTICK_PERIOD_MS);
     }
 }
 
