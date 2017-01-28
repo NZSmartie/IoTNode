@@ -134,7 +134,7 @@ void CoAP_Thread( void* p )
     mbedtls_ctr_drbg_init( &ctr_drbg );
 
     // Set up debug logging things
-    mbedtls_debug_set_threshold( ESP_LOG_WARN );
+    mbedtls_debug_set_threshold( ESP_LOG_ERROR );
     mbedtls_ssl_conf_dbg( &conf, mbed_debug, NULL );
 
     // Set up timer callbacks which are required for DTLS
@@ -143,7 +143,7 @@ void CoAP_Thread( void* p )
     /*
      * 1. Initialize certificates
      */
-    ESP_LOGI( TAG, "Loading the server certificate ...");
+    ESP_LOGD( TAG, "Loading the server certificate ...");
 
     ret = mbedtls_x509_crt_parse(&srvcert, (uint8_t*)iotnode_crt, iotnode_crt_length);
     if(ret < 0)
@@ -152,7 +152,7 @@ void CoAP_Thread( void* p )
         abort();
     }
 
-    ESP_LOGI( TAG, "ok (%d skipped)", ret);
+    ESP_LOGD( TAG, "ok (%d skipped)", ret);
 
     ESP_LOGI( TAG, "Loading the server private key..." );
     ret = mbedtls_pk_parse_key(&pkey, (uint8_t *)iotnode_key, iotnode_key_length, NULL, 0);
@@ -162,9 +162,9 @@ void CoAP_Thread( void* p )
         abort();
     }
 
-    ESP_LOGI( TAG, "ok");
+    ESP_LOGD( TAG, "ok");
     
-    ESP_LOGI( TAG, "Seeding the random number generator..." );
+    ESP_LOGD( TAG, "Seeding the random number generator..." );
 
     if((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
                                     (const unsigned char *) pers,
@@ -174,12 +174,12 @@ void CoAP_Thread( void* p )
         abort();
     }
 
-    ESP_LOGI( TAG, "ok");
+    ESP_LOGD( TAG, "ok");
 
     /*
      * 2. Setup stuff
      */
-    ESP_LOGI( TAG, "Setting up the SSL/TLS structure..." ); 
+    ESP_LOGD( TAG, "Setting up the SSL/TLS structure..." ); 
 
     if( ( ret = mbedtls_ssl_config_defaults( &conf,
                                           MBEDTLS_SSL_IS_SERVER,
@@ -193,7 +193,7 @@ void CoAP_Thread( void* p )
     mbedtls_ssl_conf_rng( &conf, mbedtls_ctr_drbg_random, &ctr_drbg );
 
 
-    ESP_LOGI( TAG, "ok");
+    ESP_LOGD( TAG, "ok");
 
     mbedtls_ssl_conf_ca_chain( &conf, srvcert.next, NULL );
     if( ( ret = mbedtls_ssl_conf_own_cert( &conf, &srvcert, &pkey ) ) != 0 )
@@ -202,7 +202,7 @@ void CoAP_Thread( void* p )
         abort();
     }
 
-    ESP_LOGI( TAG, "Setting up mbed cookies! ..." ); 
+    ESP_LOGD( TAG, "Setting up mbed cookies! ..." ); 
 
     if( ( ret = mbedtls_ssl_cookie_setup( &cookie_ctx,
                                           mbedtls_ctr_drbg_random, &ctr_drbg ) ) != 0 )
@@ -219,7 +219,7 @@ void CoAP_Thread( void* p )
     //     mbedtls_ssl_cookie_check,
     //     &cookie_ctx );
     
-    ESP_LOGI( TAG, "Setting up mbed RNG..." ); 
+    ESP_LOGD( TAG, "Setting up mbed RNG..." ); 
 
     if( ( ret = mbedtls_ssl_setup( &ssl, &conf ) ) != 0)
     {
@@ -227,11 +227,11 @@ void CoAP_Thread( void* p )
         goto exit;
     }
 
-    ESP_LOGI( TAG, "ok" ); 
+    ESP_LOGD( TAG, "ok" ); 
 
     while( ( xEventGroupWaitBits( wifi_events, COAP_CONNECTED_BIT, pdFALSE, pdTRUE, 1000 ) & COAP_CONNECTED_BIT ) == pdFAIL );
 
-    ESP_LOGI(TAG, "got connection, binding to host");
+    ESP_LOGD(TAG, "Connected event bit set: Binding to host");
 
     /*
         * 1. Start the connection
@@ -242,20 +242,26 @@ void CoAP_Thread( void* p )
         goto exit;
     }
 
-    mbedtls_ssl_session_reset( &ssl );
+    ESP_LOGI(TAG, "mbedTLS DTLS server is listening on 0.0.0.0:%s", LOCAL_PORT );
+
     while(1) {
+        mbedtls_ssl_session_reset( &ssl );
         mbedtls_net_free(&client_ctx);
 
-        //ESP_LOGI( TAG, "top of loop, free heap = %u\n", xPortGetFreeHeapSize() );
-
-        //ESP_LOGI( TAG, "ok");
+        ESP_LOGD( TAG, "top of loop, free heap = %u\n", xPortGetFreeHeapSize() );
 
         if( ( ret = mbedtls_net_accept( &server_ctx, &client_ctx, client_ip, sizeof( client_ip ) , &cliip_len ) ) != 0 ){
             ESP_LOGE( TAG, "Failed to accept connection" );
             goto exit;
         }
 
-        ESP_LOGI( TAG, "New connection from %d.%d.%d.%d", client_ip[0], client_ip[1], client_ip[2], client_ip[3] );
+        {
+            struct sockaddr_in peer_addr;
+            socklen_t peer_addr_len = sizeof( struct sockaddr_in );
+            getpeername( client_ctx.fd, ( struct sockaddr * ) &peer_addr, &peer_addr_len );
+
+            ESP_LOGI( TAG, "New client connection from " IPSTR ":%d", IP2STR((struct ip4_addr*)&peer_addr.sin_addr), peer_addr.sin_port );
+        }
 
         //TODO This stuff (DTLS Cookie handshake thingy)
         mbedtls_ssl_set_client_transport_id( &ssl, client_ip, cliip_len );
@@ -265,31 +271,31 @@ void CoAP_Thread( void* p )
         /*
          * 4. Handshake
          */
-        ESP_LOGI( TAG, "Performing the SSL/TLS handshake..." );
+        ESP_LOGD( TAG, "Performing the SSL/TLS handshake..." );
 
         do ret = mbedtls_ssl_handshake( &ssl );
         while( ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE );
         
         if( ret == MBEDTLS_ERR_SSL_HELLO_VERIFY_REQUIRED )
         {
-            ESP_LOGI( TAG, "hello verification requested" );
+            ESP_LOGI( TAG, "Hello verification requested, resetting TLS session" );
             ret = 0;
             mbedtls_net_free(&client_ctx);
             goto exit;
         }
-        else
+        else if( ret != 0 )
         {
             ESP_LOGE( TAG, "mbedtls_ssl_handshake returned -0x%x", -ret );
             goto exit;
         }
 
-        ESP_LOGI( TAG, "ok" );
+        ESP_LOGD( TAG, "ok" );
 
 
         /*
          * 3. Write the GET request
          */
-        ESP_LOGI( TAG, "Writing status to new client..." );
+        ESP_LOGD( TAG, "Writing status to new client..." );
 
         struct sockaddr_in peer_addr;
         socklen_t peer_addr_len = sizeof(struct sockaddr_in);
@@ -309,12 +315,12 @@ void CoAP_Thread( void* p )
 
         len = ret;
         ret = 0;
-        ESP_LOGI( TAG, "%d bytes written. Closing socket on client.\n%s", len, (char *) buf);
+        ESP_LOGD( TAG, "%d bytes written", len );
+        ESP_LOGI( TAG, "Closing socket on client" );
 
         mbedtls_ssl_close_notify(&ssl);
 
     exit:
-
         if(ret != 0)
         {
             char error_buf[100];
@@ -325,7 +331,6 @@ void CoAP_Thread( void* p )
             successes++;
         }
 
-        ESP_LOGI( TAG, "successes = %d failures = %d", successes, failures );
         ESP_LOGI( TAG, "Waiting for next client..." );
     }
 
