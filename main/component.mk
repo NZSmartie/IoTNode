@@ -10,6 +10,9 @@
 # Add additional subfolders to the build bath
 COMPONENT_SRCDIRS += interfaces
 
+COMPONENT_EMBED_TXTFILES := iotnode.crt
+COMPONENT_EMBED_TXTFILES += iotnode.key
+
 SHELL := /bin/bash
 SECRETS := ${COMPONENT_PATH}/secrets
 SECRETS := $(shell cat ${SECRETS} | sed -r 's/^\#.*$$//g; s/^([^=]+)$$/ -D\1/m; s/^([^=]+=)(.*)$$/ -D\1"\2"/' | tr -d '\n')
