@@ -7,7 +7,7 @@
 #include "sdkconfig.h"
 #include "esp_log.h"
 
-#include "mbed_timer.h"
+#include "mbed.h"
 
 void mbed_timer_init( mbed_timer_context *ctx )
 {

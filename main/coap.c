@@ -38,7 +38,7 @@ extern const char *server_key;
 #include "esp_log.h"
 
 #include "coap.h"
-#include "interfaces/mbed_timer.h"
+#include "interfaces/mbed.h"
 
 static const char *TAG = "CoAP";
 static EventGroupHandle_t wifi_events;

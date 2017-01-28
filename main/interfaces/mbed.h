@@ -1,6 +1,6 @@
 
-#ifndef _MBED_APP_TIMER_H
-#define _MBED_APP_TIMER_H 
+#ifndef _INTERFACES_MBED_H
+#define _INTERFACES_MBED_H 
 
 enum mbed_timer_state
 {
@@ -25,4 +25,4 @@ int mbed_timer_get_delay(void *data);
 
 void mbed_debug( void *ctx, int level, const char *file, int line, const char *str );
 
-#endif /* _MBED_APP_TIMER_H */
+#endif /* _INTERFACES_MBED_H */
