@@ -26,7 +26,9 @@ A base project IoT node for [Name of IoT project here]. Targeting ESP32 modules 
 
 2. Ensure `PATH` environment variable includes the xtensa compiler
 
-3. Running `make` in the project's root directory should build everyhting without any problems!
+3. Copy `main/secrets.example` to `main/secrets` and configure your WiFI SSID and password. 
+
+4. Running `make` in the project's root directory should build everyhting without any problems!
 
     a. There's a chance you may need be asked to set configuration defaults during `make`. That's okay! ESP-IDF is still under active development and new configuration options are expected.
 
