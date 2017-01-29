@@ -5,12 +5,25 @@
 #define COAP_THREAD_STACK_SIZE_WORDS 10240
 #define COAP_THREAD_PRIORITY 8
 
+typedef struct 
+{
+    const unsigned char *cert_ptr;
+    size_t cert_len;
+
+    const unsigned char *cert_key_ptr;
+    size_t cert_key_len;
+} CoapDtlsOptions_t;
+
+typedef struct {
+    struct {
+        unsigned char useDTLS: 1;
+    } flags;
+    CoapDtlsOptions_t DTLS;
+} CoapOptions_t;
+
 extern const int COAP_CONNECTED_BIT;
 
-extern const int OPENSSL_DEMO_RECV_BUF_LEN;
-extern const char *LOCAL_PORT;
-
-void CoAP_Init( EventGroupHandle_t wifi_events );
+void CoAP_Init( const CoapOptions_t *options, EventGroupHandle_t wifi_events );
 void CoAP_Thread( void* p );
 
 #endif /* __MAIN_COAP_ */

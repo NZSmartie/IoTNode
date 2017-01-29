@@ -2,27 +2,10 @@
 #ifndef _INTERFACES_MBED_H
 #define _INTERFACES_MBED_H 
 
-enum mbed_timer_state
-{
-    MBED_TIMER_STATE_CANCELLED = -1,
-    MBED_TIMER_STATE_RUNNING = 0,
-    MBED_TIMER_STATE_PASSED_INT = 1,
-    MBED_TIMER_STATE_PASSED_FIN = 2
-};
+#include "../coap.h"
 
-typedef struct{
-    void *d_ctx;
-    volatile uint32_t int_ms;
-    volatile uint32_t fin_ms;
-	volatile int8_t state;
-} mbed_timer_context;
+int mbed_init_dtls( const CoapDtlsOptions_t *options, EventGroupHandle_t wifi_event_group );
 
-void mbed_timer_init( mbed_timer_context *ctx );
-
-void mbed_timer_set_delay(void *data, uint32_t int_ms, uint32_t fin_ms );
-
-int mbed_timer_get_delay(void *data);
-
-void mbed_debug( void *ctx, int level, const char *file, int line, const char *str );
+int mbed_do_task( void );
 
 #endif /* _INTERFACES_MBED_H */
