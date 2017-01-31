@@ -65,7 +65,7 @@ void app_main(void)
     nvs_flash_init();
     tcpip_adapter_init();
     
-    CoAP_Init( &coap_options, wifi_event_group );
+    coap_init( &coap_options, wifi_event_group );
 
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 

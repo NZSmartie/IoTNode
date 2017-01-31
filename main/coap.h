@@ -23,7 +23,6 @@ typedef struct {
 
 extern const int COAP_CONNECTED_BIT;
 
-void CoAP_Init( const CoapOptions_t *options, EventGroupHandle_t wifi_events );
-void CoAP_Thread( void* p );
+void coap_init( const CoapOptions_t *options, EventGroupHandle_t wifi_events );
 
 #endif /* __MAIN_COAP_ */
