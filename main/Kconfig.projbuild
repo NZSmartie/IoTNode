@@ -1,0 +1,9 @@
+menu "IoTNode Configuration"
+
+config IOTNODE_HOSTNAME
+    string "Hostname"
+    default "IoTNode"
+    help
+        Hostname for the network interface.
+
+endmenu

@@ -1,5 +1,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+
+#include "sdkconfig.h"
+
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
@@ -7,8 +10,11 @@
 #include "nvs_flash.h"
 #include "driver/gpio.h"
 
+#include "esp_log.h"
+
 #include "coap.h"
 
+static const char* TAG = "IoTNode";
 static bool connected = false;
 static EventGroupHandle_t wifi_event_group;
 
@@ -37,8 +43,14 @@ CoapOptions_t coap_options = ( CoapOptions_t ){
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
+    int ret;
     switch ( event->event_id )
     {
+        case SYSTEM_EVENT_STA_START:
+            // Change the default hostname (can only be done when interface has started)
+            if ( (ret = tcpip_adapter_set_hostname( TCPIP_ADAPTER_IF_STA, CONFIG_IOTNODE_HOSTNAME ) ) != ESP_OK )
+                ESP_LOGE( TAG, "tcpip_adapter_set_hostname failed to set Hostname to \"" CONFIG_IOTNODE_HOSTNAME "\" with %d (0x%X)", ret, ret );
+            break;
         case SYSTEM_EVENT_STA_CONNECTED:
             connected = true;
             break;
