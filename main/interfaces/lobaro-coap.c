@@ -96,7 +96,7 @@ static bool send_datagram( uint8_t ifID, NetPacket_t* pckt )
     client_address.sin_len = sizeof( client_address );
     client_address.sin_family = AF_INET;
     client_address.sin_port = htons( pckt->Receiver.NetPort );
-    client_address.sin_addr.s_addr = htonl( pckt->Receiver.NetAddr.IPv4.u32[0] );
+    client_address.sin_addr.s_addr = pckt->Receiver.NetAddr.IPv4.u32[0];
 
     if( sendto( (int) pSocket->Handle, pckt->pData, pckt->size, 0, (struct sockaddr*) &client_address, client_address.sin_len ) >= 0 )
         return true;
@@ -133,23 +133,24 @@ static void read_datagram( int fd )
     packet.pData = coap_payload;
     packet.size = ret;
 
-    inet_ntop( remote_addr.ss_family, &remote_addr, address, INET6_ADDRSTRLEN );
     if( remote_addr.ss_family == AF_INET )
     {
+        inet_ntop( remote_addr.ss_family, &( (struct sockaddr_in*) &remote_addr)->sin_addr, address, INET6_ADDRSTRLEN );
         packet.Sender.NetType = IPV4;
         packet.Sender.NetPort = ntohs( ( (struct sockaddr_in*) &remote_addr )->sin_port );
-        packet.Sender.NetAddr.IPv4.u32[0] = ntohl( ( (struct sockaddr_in*) &remote_addr )->sin_addr.s_addr );
+        packet.Sender.NetAddr.IPv4.u32[0] = ( (struct sockaddr_in*) &remote_addr )->sin_addr.s_addr;
 
         ESP_LOGI( TAG, "Received %d Bytes from %s:%hu", ret, address, packet.Sender.NetPort );
     }
     else
     {
+        inet_ntop( remote_addr.ss_family, &( (struct sockaddr_in6*) &remote_addr)->sin6_addr, address, INET6_ADDRSTRLEN );
         packet.Sender.NetType = IPV6;
         packet.Sender.NetPort = ntohs( ( (struct sockaddr_in6*) &remote_addr )->sin6_port );
-        packet.Sender.NetAddr.IPv6.u32[0] = ntohl( ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[0] );
-        packet.Sender.NetAddr.IPv6.u32[1] = ntohl( ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[1] );
-        packet.Sender.NetAddr.IPv6.u32[2] = ntohl( ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[2] );
-        packet.Sender.NetAddr.IPv6.u32[3] = ntohl( ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[3] );
+        packet.Sender.NetAddr.IPv6.u32[0] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[0];
+        packet.Sender.NetAddr.IPv6.u32[1] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[1];
+        packet.Sender.NetAddr.IPv6.u32[2] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[2];
+        packet.Sender.NetAddr.IPv6.u32[3] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[3];
 
         ESP_LOGI( TAG, "Received %d Bytes from [%s]:%hu", ret, address, ( (struct sockaddr_in6*) &remote_addr )->sin6_port );
     }
@@ -201,6 +202,9 @@ int lobaro_coap_init( void )
     int on = 1;
     if ( setsockopt( listen_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof( on ) ) < 0 )
         ESP_LOGE( TAG , "setsockopt SO_REUSEADDR");
+
+    if ( setsockopt( listen_socket, SOL_SOCKET, SO_BROADCAST, &on, sizeof( on ) ) < 0 )
+        ESP_LOGE( TAG , "setsockopt SO_BROADCAST");
 
     {
         struct sockaddr_in listen_address;
