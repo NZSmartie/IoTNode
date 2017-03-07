@@ -1,7 +1,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 
-#include "lwip/sockets.h"
+#include "lwip/api.h"
 
 #include "lobaro-coap/coap.h"
 
@@ -32,9 +32,6 @@ typedef struct
     void (*recv_dataggram)( void );
     void (*send_dataggram)( void );
 } LobaroCoapSocket_t;
-
-static struct fd_set readfds;
-
 
 //Uart/Display function to print debug/status messages to
 void hal_uart_puts( char *s ) {
@@ -77,52 +74,51 @@ bool hal_nonVolatile_WriteBuf( uint8_t* data, uint32_t len ){
 
 static bool send_datagram( uint8_t ifID, NetPacket_t* pckt )
 {
+    bool success = false;
     NetSocket_t *pSocket;
-    struct sockaddr_in client_address;
+    ip_addr_t client_address = IPADDR4_INIT( 0 );
+    struct netbuf *buffer = netbuf_new();
 
-    if(pckt->Receiver.NetType != IPV4){
-        ESP_LOGE( TAG, "send_datagram( ... ): Wrong NetType");
-        return false;
-    }
-
-    pSocket = RetrieveSocket2( ifID );
-    if( pSocket == NULL )
+    do
     {
-        ESP_LOGE( TAG, "send_datagram( ... ): InterfaceID not found");
-        return false;
+        if( netbuf_ref(buffer, pckt->pData, pckt->size) != ERR_OK)
+        {
+            ESP_LOGE( TAG, "netbuf_ref( ... ): failed");
+            break;
+        }
+
+        if(pckt->Receiver.NetType != IPV4){
+            ESP_LOGE( TAG, "send_datagram( ... ): Wrong NetType");
+            break;
+        }
+
+        pSocket = RetrieveSocket2( ifID );
+        if( pSocket == NULL )
+        {
+            ESP_LOGE( TAG, "send_datagram( ... ): InterfaceID not found");
+            break;
+        }
+
+        ip_2_ip4(&client_address)->addr = pckt->Receiver.NetAddr.IPv4.u32[0];
+
+        if( netconn_sendto( (struct netconn*) pSocket->Handle, buffer, &client_address, pckt->Receiver.NetPort ) != ERR_OK )
+        {
+            ESP_LOGE( TAG, "send_datagram returned %d; Internal Socket Error", errno );
+            break;
+        }
+        success = true;
     }
+    while( 0 );
 
-    memset( &client_address, 0, sizeof( client_address ) );
-    client_address.sin_len = sizeof( client_address );
-    client_address.sin_family = AF_INET;
-    client_address.sin_port = htons( pckt->Receiver.NetPort );
-    client_address.sin_addr.s_addr = pckt->Receiver.NetAddr.IPv4.u32[0];
-
-    if( sendto( (int) pSocket->Handle, pckt->pData, pckt->size, 0, (struct sockaddr*) &client_address, client_address.sin_len ) >= 0 )
-        return true;
-
-    ESP_LOGE( TAG, "send_datagram returned %d; Internal Socket Error", errno );
-    return false;
+    netbuf_delete( buffer );
+    return success;
 }
 
-static uint8_t coap_payload[ MAX_PAYLOAD_SIZE ];
-
-static void read_datagram( int fd )
+static void read_datagram( struct netconn* fd, struct netbuf* buffer )
 {
-    struct sockaddr_storage remote_addr = { 0 };
-    char address[ INET6_ADDRSTRLEN ];
-    int ret;
-
     NetPacket_t  packet;
     NetSocket_t* pSocket = NULL;
     
-    socklen_t remote_addr_len = sizeof( remote_addr );
-    if( ( ret = recvfrom( fd, coap_payload, MAX_PAYLOAD_SIZE, 0, (struct sockaddr*) &remote_addr, &remote_addr_len ) ) <= 0 )
-    {
-        ESP_LOGE( TAG, "recvfrom() failed with %d", ret );
-        return;
-    }
-
     pSocket = RetrieveSocket( (SocketHandle_t) fd );
 
     if(pSocket == NULL){
@@ -130,32 +126,51 @@ static void read_datagram( int fd )
         return;
     }
 
-    packet.pData = coap_payload;
-    packet.size = ret;
+    netbuf_data( buffer, (void**) &packet.pData, &packet.size );
+    packet.Sender.NetPort = buffer->port;
+    packet.Receiver.NetPort = pSocket->EpLocal.NetPort;
 
-    if( remote_addr.ss_family == AF_INET )
+    if( buffer->addr.type == IPADDR_TYPE_V4 )
     {
-        inet_ntop( remote_addr.ss_family, &( (struct sockaddr_in*) &remote_addr)->sin_addr, address, INET6_ADDRSTRLEN );
         packet.Sender.NetType = IPV4;
-        packet.Sender.NetPort = ntohs( ( (struct sockaddr_in*) &remote_addr )->sin_port );
-        packet.Sender.NetAddr.IPv4.u32[0] = ( (struct sockaddr_in*) &remote_addr )->sin_addr.s_addr;
-
-        ESP_LOGI( TAG, "Received %d Bytes from %s:%hu", ret, address, packet.Sender.NetPort );
+        packet.Sender.NetAddr.IPv4.u32[0] = ip_addr_get_ip4_u32( &buffer->addr );
+     
+        ESP_LOGI( TAG, "Received %d Bytes from %s:%hu", packet.size, ipaddr_ntoa( &buffer->addr ), buffer->port );
     }
-    else
+    else if( buffer->addr.type == IPADDR_TYPE_V6 )
     {
-        inet_ntop( remote_addr.ss_family, &( (struct sockaddr_in6*) &remote_addr)->sin6_addr, address, INET6_ADDRSTRLEN );
         packet.Sender.NetType = IPV6;
-        packet.Sender.NetPort = ntohs( ( (struct sockaddr_in6*) &remote_addr )->sin6_port );
-        packet.Sender.NetAddr.IPv6.u32[0] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[0];
-        packet.Sender.NetAddr.IPv6.u32[1] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[1];
-        packet.Sender.NetAddr.IPv6.u32[2] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[2];
-        packet.Sender.NetAddr.IPv6.u32[3] = ( (struct sockaddr_in6*) &remote_addr )->sin6_addr.un.u32_addr[3];
+        packet.Sender.NetAddr.IPv6.u32[0] = ip_2_ip6( &buffer->addr )->addr[0];
+        packet.Sender.NetAddr.IPv6.u32[1] = ip_2_ip6( &buffer->addr )->addr[1];
+        packet.Sender.NetAddr.IPv6.u32[2] = ip_2_ip6( &buffer->addr )->addr[2];
+        packet.Sender.NetAddr.IPv6.u32[3] = ip_2_ip6( &buffer->addr )->addr[3];
 
-        ESP_LOGI( TAG, "Received %d Bytes from [%s]:%hu", ret, address, ( (struct sockaddr_in6*) &remote_addr )->sin6_port );
+        ESP_LOGI( TAG, "Received %d Bytes from [%s]:%hu", packet.size, ipaddr_ntoa( &buffer->addr ), buffer->port );
     }
 
-    coap_memcpy( &pSocket->EpLocal, &packet.Receiver, sizeof( NetEp_t ) );
+#if LWIP_NETBUF_RECVINFO
+    // packet.Receiver.NetPort = buffer->port;
+
+    if( buffer->toaddr.type == IPADDR_TYPE_V4 )
+    {
+        packet.Receiver.NetType = IPV4;
+        packet.Receiver.NetAddr.IPv4.u32[0] = ip_addr_get_ip4_u32( &buffer->toaddr );
+     
+        ESP_LOGI( TAG, "Packet sent to %s", ipaddr_ntoa( &buffer->toaddr ) );
+    }
+    else if( buffer->addr.type == IPADDR_TYPE_V6 )
+    {
+        packet.Receiver.NetType = IPV6;
+        packet.Receiver.NetAddr.IPv6.u32[0] = ip_2_ip6( &buffer->toaddr )->addr[0];
+        packet.Receiver.NetAddr.IPv6.u32[1] = ip_2_ip6( &buffer->toaddr )->addr[1];
+        packet.Receiver.NetAddr.IPv6.u32[2] = ip_2_ip6( &buffer->toaddr )->addr[2];
+        packet.Receiver.NetAddr.IPv6.u32[3] = ip_2_ip6( &buffer->toaddr )->addr[3];
+
+        ESP_LOGI( TAG, "Packet sent to [%s]", ipaddr_ntoa( &buffer->toaddr ) );
+    }
+#else
+    #error Totally need LWIP_NETBUF_RECVINFO set to 1
+#endif /* LWIP_NETBUF_RECVINFO */
 
     packet.MetaInfo.Type = META_INFO_NONE;
 
@@ -172,7 +187,7 @@ int lobaro_coap_init( void )
 {
     static uint8_t coap_work_memory[ COAP_MEMORY_SIZE ]; // Working memory of CoAPs internal memory allocator
     NetSocket_t* pSocket;
-    int listen_socket;
+    struct netconn* listen_socket;
 
     CoAP_Init( coap_work_memory, COAP_MEMORY_SIZE );
 
@@ -192,38 +207,30 @@ int lobaro_coap_init( void )
     pSocket->EpLocal.NetType = IPV4;
     pSocket->EpLocal.NetPort = COAP_PORT;
 
-    listen_socket = socket( AF_INET, SOCK_DGRAM, 0 );
-    if( listen_socket < 0 )
+    listen_socket = netconn_new(NETCONN_UDP);
+    if( listen_socket == NULL )
     {
-        ESP_LOGE( TAG, "socket( ... ): Failed to get new socket" );
+        ESP_LOGE( TAG, "netconn_new(): Failed to get new socket" );
         return -1;
     }
 
-    int on = 1;
-    if ( setsockopt( listen_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof( on ) ) < 0 )
-        ESP_LOGE( TAG , "setsockopt SO_REUSEADDR");
+    ip_addr_t multicast_addr;
 
-    if ( setsockopt( listen_socket, SOL_SOCKET, SO_BROADCAST, &on, sizeof( on ) ) < 0 )
-        ESP_LOGE( TAG , "setsockopt SO_BROADCAST");
+    // if ( setsockopt( listen_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof( on ) ) < 0 )
+    //     ESP_LOGE( TAG , "setsockopt SO_REUSEADDR");
 
+    if( netconn_bind( listen_socket, NULL, COAP_PORT ) != ERR_OK )
     {
-        struct sockaddr_in listen_address;
-
-        memset( &listen_address, 0, sizeof( struct sockaddr_in ) );
-        listen_address.sin_family = AF_INET;
-        listen_address.sin_len = sizeof( listen_address );
-        listen_address.sin_addr.s_addr = INADDR_ANY;
-        listen_address.sin_port = htons( COAP_PORT );
-
-        if( bind( listen_socket, (struct sockaddr*) &listen_address, sizeof( listen_address ) ) < 0 )
-        {
-            ESP_LOGE( TAG, "bind( ... ): Failed" );
-            close( listen_socket );
-            return NULL;
-        }
-
-        ESP_LOGI( TAG, "Coap library now listening" );
+        ESP_LOGE( TAG, "netconn_bind( ... ): Failed" );
+        netconn_delete( listen_socket );
+        return NULL;
     }
+    
+    IP4_ADDR( ip_2_ip4(&multicast_addr) , 224, 0, 1, 187 );
+    if( netconn_join_leave_group( listen_socket, &multicast_addr, NULL, NETCONN_JOIN ) != ERR_OK )
+        ESP_LOGE( TAG, "netconn_join_leave_group( ... ): Failed" );
+
+    ESP_LOGI( TAG, "Coap library now listening" );
 
     pSocket->Handle = (SocketHandle_t) listen_socket; // external  to CoAP Stack
     pSocket->ifID = COAP_INTERFACE_CLEARTEXT;         // internal  to CoAP Stack
@@ -233,18 +240,13 @@ int lobaro_coap_init( void )
     pSocket->Tx = &send_datagram;
     pSocket->Alive = true;
 
-    ESP_LOGD( TAG, "Listening: IfID: %d, socket: %d Port: %hu", COAP_INTERFACE_CLEARTEXT, listen_socket, COAP_PORT );
+    ESP_LOGD( TAG, "Listening: IfID: %d, Port: %hu", COAP_INTERFACE_CLEARTEXT, COAP_PORT );
 
     return 0;
 }
 
 void lobaro_coap_do_work( void )
 {
-    struct timeval tv = (struct timeval) {
-        .tv_sec = 0,
-        .tv_usec = 250000
-    };
-
     // TODO: Loop through all interfaces, and perform interface specific polling stuff
     // For now, work with UDP sockets and call Lobaro-coap stuff
 
@@ -252,19 +254,17 @@ void lobaro_coap_do_work( void )
     if( pSocket == NULL )
         return;
 
-    int listen_socket = (int) pSocket->Handle;
+    struct netconn* listen_socket = (struct netconn*) pSocket->Handle;
+    struct netbuf* buffer = NULL;
 
-    FD_ZERO( &readfds );
-    FD_CLR( listen_socket, &readfds );
-    FD_SET( listen_socket, &readfds );
-
-    int ret = select( FD_SETSIZE, &readfds, 0, 0, &tv );
-    if( ret > 0 )
+    listen_socket->recv_timeout = 0;
+    int ret = netconn_recv( listen_socket,  &buffer );
+    
+    if( ret == ERR_OK )
     {
         ESP_LOGD( TAG, "Oop, something happened~!" );
-
-        if( FD_ISSET( listen_socket, &readfds ) )
-            read_datagram( listen_socket );
+        read_datagram( listen_socket, buffer );
+        netbuf_delete( buffer );
     }
 
     CoAP_doWork();

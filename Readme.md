@@ -8,7 +8,6 @@ A base project IoT node for [Name of IoT project here]. Targeting ESP32 modules 
 
  - Implement a lightweight protocol for accessing node data 
    + [CoAP](http://coap.technology/) - Constrained Application Protocol
-   + [MQTT](http://mqtt.org/) - A machine-to-machine (M2M)/"Internet of Things" connectivity protocol.
    + ...or any other suitable protocol that provides longer battery life 
  - Secure by default
    + None of that pesky "*default password*" crap
@@ -22,13 +21,15 @@ A base project IoT node for [Name of IoT project here]. Targeting ESP32 modules 
 
 ## Setup
 
-1. Download `esp-idf`, follow it's setup instructions and configure `IDF_PATH` environment variable to have the path of `esp-idf` on your file system.
+1. If you didn't `git clone ... --recursive` to pull down submodules, then you'll need to run `git submodule init && git submodule update`
 
-2. Ensure `PATH` environment variable includes the xtensa compiler
+2. Download `esp-idf`, follow it's setup instructions and configure `IDF_PATH` environment variable to have the path of `esp-idf` on your file system.
 
-3. Copy `main/secrets.example` to `main/secrets` and configure your WiFI SSID and password. 
+3. Ensure `PATH` environment variable includes the xtensa compiler
 
-4. Running `make` in the project's root directory should build everyhting without any problems!
+4. Copy `main/secrets.example` to `main/secrets` and configure your WiFI SSID and password. 
+
+5. Running `make` in the project's root directory should build everyhting without any problems!
 
     a. There's a chance you may need be asked to set configuration defaults during `make`. That's okay! ESP-IDF is still under active development and new configuration options are expected.
 
