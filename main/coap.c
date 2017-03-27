@@ -12,7 +12,7 @@
 static const char *TAG = "CoAP";
 static EventGroupHandle_t wifi_events;
 
-const int COAP_CONNECTED_BIT = ( 1 << 0 );
+const int kCoapConnectedBit = ( 1 << 0 );
 
 static const CoapOptions_t *_options;
 
@@ -20,7 +20,7 @@ static void coap_thread( void* p )
 {
     ESP_LOGI( TAG, "Hello from %s!", COAP_THREAD_NAME );
 
-    while( ( xEventGroupWaitBits( wifi_events, COAP_CONNECTED_BIT, pdFALSE, pdTRUE, 1000 ) & COAP_CONNECTED_BIT ) == pdFAIL );
+    while( ( xEventGroupWaitBits( wifi_events, kCoapConnectedBit, pdFALSE, pdTRUE, 1000 ) & kCoapConnectedBit ) == pdFAIL );
 
     // int ret;
     // if( ( ret = mbed_init_dtls( &_options->DTLS, wifi_events ) ) != 0)
@@ -41,18 +41,18 @@ static void coap_thread( void* p )
     return;
 }
 
-void coap_init( const CoapOptions_t *options, EventGroupHandle_t wifi_event_group )
+CoapResult_t coap_init( const CoapOptions_t *options, EventGroupHandle_t wifi_event_group )
 {
     int ret;
     xTaskHandle coap_handle;
 
-    assert( options != NULL );
+    if( options == NULL ) return kCoapError;
     _options = options;
 
-    assert( wifi_event_group != NULL );
+    if( wifi_event_group == NULL ) return kCoapError;
     wifi_events = wifi_event_group;
 
-    ret = xTaskCreate( 
+    ret = xTaskCreate(
         coap_thread,
         COAP_THREAD_NAME,
         COAP_THREAD_STACK_SIZE_WORDS,
@@ -61,8 +61,11 @@ void coap_init( const CoapOptions_t *options, EventGroupHandle_t wifi_event_grou
         &coap_handle
     );
 
-    if( ret != pdPASS ){
+    if( ret != pdPASS )
+    {
         ESP_LOGE( TAG, "Failed to create thread %s", COAP_THREAD_NAME );
-        abort();
+        return kCoapError;
     }
+
+    return kCoapOK;
 }

@@ -6,4 +6,10 @@ config IOTNODE_HOSTNAME
     help
         Hostname for the network interface.
 
+config IOTNODE_DEVICE_UUID
+    string "Device UUID"
+    default "00000000-0000-0000-0000-000000000000"
+    help
+        UUID used to uniquely identify this device.
+
 endmenu

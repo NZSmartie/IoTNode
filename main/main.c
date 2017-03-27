@@ -55,10 +55,10 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
             connected = true;
             break;
         case SYSTEM_EVENT_STA_GOT_IP:
-            xEventGroupSetBits( wifi_event_group, COAP_CONNECTED_BIT );
+            xEventGroupSetBits( wifi_event_group, kCoapConnectedBit );
             break;
         case SYSTEM_EVENT_STA_DISCONNECTED:
-            xEventGroupClearBits( wifi_event_group, COAP_CONNECTED_BIT );
+            xEventGroupClearBits( wifi_event_group, kCoapConnectedBit );
             connected = false;
             break;
         default:
@@ -77,7 +77,8 @@ void app_main(void)
     nvs_flash_init();
     tcpip_adapter_init();
     
-    coap_init( &coap_options, wifi_event_group );
+    if( coap_init( &coap_options, wifi_event_group ) != kCoapOK )
+        ESP_LOGE( TAG, "Failed to initialise coap" );
 
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 

@@ -8,14 +8,14 @@
 #
 
 # Allows the build 
-COMPONENT_SUBMODULES += lobaro-coap
+COMPONENT_SUBMODULES += cn-cbor
 
 # The Source dirs have been adopted from lobaro-coap/CMakeLists.txt
-COMPONENT_SRCDIRS := lobaro-coap/src/interface/debug lobaro-coap/src/interface/mem lobaro-coap/src/interface/network lobaro-coap/src/interface lobaro-coap/src/option-types lobaro-coap/src
+COMPONENT_SRCDIRS := cn-cbor/src
 
 # Helps to namespace the include path. I like my #include's to be easy to follow
-COMPONENT_ADD_INCLUDEDIRS := lobaro-coap/src
+COMPONENT_ADD_INCLUDEDIRS := cn-cbor/include
 
 # Let the library know to use 
 # Use C99 standard, and disable warnings that prevent compilation of 3rd party library (Yeah i know....)
-CFLAGS += -std=c99 -Wno-enum-compare -Wno-format -Wno-format-extra-args -Wno-pointer-sign -Wno-unused-variable -Wno-unused-but-set-variable
+CFLAGS += -std=gnu99

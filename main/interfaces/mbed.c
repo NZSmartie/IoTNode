@@ -298,7 +298,7 @@ int mbed_init_dtls( const CoapDtlsOptions_t *options, EventGroupHandle_t wifi_ev
 
     ESP_LOGD( TAG, "ok" ); 
 
-    while( ( xEventGroupWaitBits( wifi_events, COAP_CONNECTED_BIT, pdFALSE, pdTRUE, 1000 ) & COAP_CONNECTED_BIT ) == pdFAIL );
+    while( ( xEventGroupWaitBits( wifi_events, kCoapConnectedBit, pdFALSE, pdTRUE, 1000 ) & kCoapConnectedBit ) == pdFAIL );
 
     ESP_LOGD(TAG, "Connected event bit set: Binding to host");
 

@@ -8,7 +8,7 @@
 #
 
 # Add additional subfolders to the build bath
-COMPONENT_SRCDIRS += interfaces
+COMPONENT_SRCDIRS += interfaces resources
 
 COMPONENT_EMBED_TXTFILES := iotnode.crt
 COMPONENT_EMBED_TXTFILES += iotnode.key
