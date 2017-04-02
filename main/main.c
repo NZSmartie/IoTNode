@@ -12,7 +12,9 @@
 
 #include "esp_log.h"
 
+#include "interfaces/lobaro-coap.h"
 #include "coap.h"
+#include "oic.h"
 
 static const char* TAG = "IoTNode";
 static bool connected = false;
@@ -72,13 +74,21 @@ void app_main(void)
     coap_options.DTLS.cert_len = iotnode_crt_end - iotnode_crt;
     coap_options.DTLS.cert_key_len = iotnode_key_end - iotnode_key;  
 
+
     wifi_event_group = xEventGroupCreate();
 
     nvs_flash_init();
     tcpip_adapter_init();
+
+    // Gets the coap interface that's implemeented by a library
+    CoapInterface_t coap_interface = CoapGetInterface();
     
-    if( coap_init( &coap_options, wifi_event_group ) != kCoapOK )
+    // Initiallise our CoAP Protocol handler
+    if( coap_init( coap_interface, &coap_options, wifi_event_group ) != kCoapOK )
         ESP_LOGE( TAG, "Failed to initialise coap" );
+
+    // Initialise the OIC handler 
+    oic_init( coap_interface );
 
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 

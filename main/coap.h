@@ -128,6 +128,6 @@ typedef struct{
     coap_unregister_reesource_t      unregister_reesource;
 } CoapInterface_t;
 
-CoapResult_t coap_init( const CoapOptions_t *options, EventGroupHandle_t wifi_events );
+CoapResult_t coap_init( const CoapInterface_t interface, const CoapOptions_t *options, EventGroupHandle_t wifi_events );
 
 #endif /* __MAIN_COAP_ */

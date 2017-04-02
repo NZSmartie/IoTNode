@@ -6,10 +6,28 @@ config IOTNODE_HOSTNAME
     help
         Hostname for the network interface.
 
-config IOTNODE_DEVICE_UUID
-    string "Device UUID"
+config IOTNODE_MODEL
+    string "Model"
+    default "ESP32-Prototype"
+    help
+        Hostname for the network interface.
+
+config IOTNODE_PLATFORM_UUID
+    string "Platform ID. Unique to the physical device (Not to be confused with Device ID)"
     default "00000000-0000-0000-0000-000000000000"
     help
-        UUID used to uniquely identify this device.
+        UUID used to uniquely identify this physical device.
+
+config IOTNODE_MANUFACTURER_NAME
+    string "Your (company) name"
+    default "Roman Vaughan (NZSmartie)"
+    help
+        Manufactuerer's name for device to report.
+
+config IOTNODE_MANUFACTURER_URL
+    string "Your (company) name"
+    default "https://github.com/NZSmartie"
+    help
+        Manufactuerer's Website.
 
 endmenu

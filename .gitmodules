@@ -1,6 +1,6 @@
 [submodule "components/lobaro-coap/lobaro-coap"]
 	path = components/lobaro-coap/lobaro-coap
-	url = https://github.com/Lobaro/lobaro-coap
+	url = https://github.com/NZSmartie/lobaro-coap
 [submodule "components/parson/parson"]
 	path = components/parson/parson
 	url = https://github.com/kgabis/parson

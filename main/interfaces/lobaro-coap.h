@@ -3,7 +3,8 @@
 
 #include "../coap.h"
 
-int lobaro_coap_init( void );
+void lobaro_coap_init( void );
+int lobaro_coap_listen( void );
 void lobaro_coap_do_work( void );
 
 CoapInterface_t CoapGetInterface( void );

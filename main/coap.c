@@ -9,12 +9,16 @@
 #include "interfaces/mbed.h"
 #include "interfaces/lobaro-coap.h"
 
+#include "resources/leds.h"
+
 static const char *TAG = "CoAP";
 static EventGroupHandle_t wifi_events;
 
 const int kCoapConnectedBit = ( 1 << 0 );
 
 static const CoapOptions_t *_options;
+
+static CoapInterface_t coap_interface;
 
 static void coap_thread( void* p )
 {
@@ -29,7 +33,7 @@ static void coap_thread( void* p )
     //     abort();
     // }
 
-    lobaro_coap_init();
+    lobaro_coap_listen();
 
     while( 1 )
     {
@@ -41,10 +45,16 @@ static void coap_thread( void* p )
     return;
 }
 
-CoapResult_t coap_init( const CoapOptions_t *options, EventGroupHandle_t wifi_event_group )
+CoapResult_t coap_init( const CoapInterface_t interface, const CoapOptions_t *options, EventGroupHandle_t wifi_event_group )
 {
     int ret;
     xTaskHandle coap_handle;
+
+    coap_interface = interface;
+
+    lobaro_coap_init();
+
+    coap_create_led_resource( coap_interface );
 
     if( options == NULL ) return kCoapError;
     _options = options;

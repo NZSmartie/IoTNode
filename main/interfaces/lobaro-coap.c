@@ -23,7 +23,6 @@
 // Custom Resources
 
 #include "../resources/name.h"
-#include "../resources/leds.h"
 
 static const char* TAG = "Lobaro-CoAP";
 
@@ -200,7 +199,14 @@ static void read_datagram( struct netconn* fd, struct netbuf* buffer )
     return;
 }
 
-int lobaro_coap_init( void )
+void lobaro_coap_init( void )
+{
+    CoAP_Init( coap_api, coap_cfg );
+
+    coap_create_resources();
+}
+
+int lobaro_coap_listen( void )
 {
     struct netconn* listen_socket;
 
@@ -210,8 +216,6 @@ int lobaro_coap_init( void )
         ESP_LOGE( TAG, "netconn_new(): Failed to get new socket" );
         return -1;
     }
-
-    CoAP_Init( coap_api, coap_cfg );
 
     // Allocate a socket in Lobaro CoAP's memory and return the address
     if( ( pSocket = CoAP_NewSocket(listen_socket) ) == NULL ){
@@ -240,8 +244,6 @@ int lobaro_coap_init( void )
 
     ESP_LOGD( TAG, "Listening: IfID: %d, Port: %hu", COAP_INTERFACE_CLEARTEXT, COAP_PORT );
 
-    coap_create_resources();
-    coap_create_led_resource( CoapGetInterface() );
     return 0;
 }
 
@@ -389,7 +391,7 @@ static CoapResult_t coap_message_get_option_uint( const CoapMessage_t message, c
 {
     const CoAP_Message_t *pMsg = (CoAP_Message_t*)message;
 
-    CoAP_option_t *pOpt = CoAP_FindOptionByNumber( pMsg, option );
+    CoAP_option_t *pOpt = CoAP_FindOptionByNumber( (CoAP_Message_t*)pMsg, option );
     if( pOpt == NULL )
         return kCoapError;
 
