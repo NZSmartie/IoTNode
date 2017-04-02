@@ -9,8 +9,6 @@
 #include "interfaces/mbed.h"
 #include "interfaces/lobaro-coap.h"
 
-#include "resources/leds.h"
-
 static const char *TAG = "CoAP";
 static EventGroupHandle_t wifi_events;
 
@@ -53,8 +51,6 @@ CoapResult_t coap_init( const CoapInterface_t interface, const CoapOptions_t *op
     coap_interface = interface;
 
     lobaro_coap_init();
-
-    coap_create_led_resource( coap_interface );
 
     if( options == NULL ) return kCoapError;
     _options = options;

@@ -16,6 +16,8 @@
 #include "coap.h"
 #include "oic.h"
 
+#include "resources/leds.h"
+
 static const char* TAG = "IoTNode";
 static bool connected = false;
 static EventGroupHandle_t wifi_event_group;
@@ -89,6 +91,8 @@ void app_main(void)
 
     // Initialise the OIC handler 
     oic_init( coap_interface );
+
+    coap_create_led_resource( coap_interface );
 
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 

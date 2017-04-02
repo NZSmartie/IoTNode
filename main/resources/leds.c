@@ -10,12 +10,22 @@
 #include "esp_err.h"
 
 #include "../coap.h"
+#include "../oic.h"
 
 #include "esp_log.h"
 
 #include "parson.h"
 
+static CoapResult_t led_requesthandler( const CoapResource_t resource, const CoapMessage_t request, CoapMessage_t response );
+
 CoapResource_t led_resource = NULL;
+OICResource_t led_oic_resource = {
+    .href = "/leds",
+    .interfaces = kOICInterfaceBaseline | kOICInterfaceActuator,
+    .callback = led_requesthandler,
+    .resource_types_count = 1,
+    .resource_types = { "oic.r.colour.rgb" },
+};
 static const char *TAG = "LEDs Resource";
 
 static double red, green, blue;
@@ -28,12 +38,12 @@ static CoapInterface_t _coap;
 
 // LED PWM Lookup table
 static int LED_LOOKUP[] = {
-	0, 21, 22, 23, 24, 26, 27, 28, 30, 31, 33, 34, 36, 38, 39, 41,
-    43, 45, 48, 50, 52, 55, 57, 60, 63, 66, 69, 73, 76, 80, 84, 88,
-    92, 97, 101, 106, 111, 117, 122, 128, 134, 141, 147, 154, 162, 170, 178, 186,
-    195, 204, 214, 224, 235, 246, 257, 269, 282, 295, 309, 324, 339, 355, 371, 389,
-    407, 425, 445, 465, 487, 509, 532, 556, 582, 608, 635, 664, 693, 724, 756, 790,
-    824, 860, 898, 936, 977, 1018, 1061, 1106, 1153, 1201, 1250, 1301, 1354, 1409, 1466, 1524,
+	0,    21,   22,   23,   24,   26,   27,   28,   30,   31,   33,   34,   36,   38,   39,   41,
+    43,   45,   48,   50,   52,   55,   57,   60,   63,   66,   69,   73,   76,   80,   84,   88,
+    92,   97,   101,  106,  111,  117,  122,  128,  134,  141,  147,  154,  162,  170,  178,  186,
+    195,  204,  214,  224,  235,  246,  257,  269,  282,  295,  309,  324,  339,  355,  371,  389,
+    407,  425,  445,  465,  487,  509,  532,  556,  582,  608,  635,  664,  693,  724,  756,  790,
+    824,  860,  898,  936,  977,  1018, 1061, 1106, 1153, 1201, 1250, 1301, 1354, 1409, 1466, 1524,
     1584, 1645, 1709, 1774, 1841, 1910, 1981, 2053, 2127, 2203, 2281, 2360, 2441, 2523, 2607, 2692,
     2779, 2867, 2957, 3047, 3139, 3231, 3325, 3420, 3515, 3611, 3707, 3804, 3901, 3998, 4096, 4194,
     4291, 4388, 4485, 4581, 4677, 4772, 4867, 4961, 5053, 5145, 5235, 5325, 5413, 5500, 5585, 5669,
@@ -52,7 +62,7 @@ static CoapResult_t led_requesthandler( const CoapResource_t resource, const Coa
 
     JSON_Value *root_value;
     JSON_Object *root_object;
-    JSON_Array *json_leds_color;
+    JSON_Array *json_rgb_value;
 
     uint32_t accept = 0;
     if( _coap.message_get_option_uint( request, kCoapOptionAccept, &accept ) != kCoapOK )
@@ -93,21 +103,21 @@ static CoapResult_t led_requesthandler( const CoapResource_t resource, const Coa
             return kCoapError;
         }
 
-        json_leds_color = json_object_dotget_array( root_object , "leds.colour" );
-        if( json_leds_color == NULL )
+        json_rgb_value = json_object_get_array( root_object , "rgbValue" );
+        if( json_rgb_value == NULL )
         {
             json_value_free( root_value );
             _coap.message_set_code( response, kCoapMessageCodeBadRequest );
             return kCoapError;
         }
 
-        red = json_array_get_number( json_leds_color, 0 );
+        red = json_array_get_number( json_rgb_value, 0 );
         if (red > 255 ) red = 255;
         if (red < 0 ) red = 0;
-        green = json_array_get_number( json_leds_color, 1 );
+        green = json_array_get_number( json_rgb_value, 1 );
         if (green > 255 ) green = 255;
         if (green < 0 ) green = 0;
-        blue = json_array_get_number( json_leds_color, 2 );
+        blue = json_array_get_number( json_rgb_value, 2 );
         if (blue > 255 ) blue = 255;
         if (blue < 0 ) blue = 0;
 
@@ -126,13 +136,24 @@ static CoapResult_t led_requesthandler( const CoapResource_t resource, const Coa
 
     root_value = json_value_init_object();
     root_object = json_value_get_object(root_value);
-    json_leds_color = json_array( json_value_init_array() );
+    json_rgb_value = json_array( json_value_init_array() );
 
-    json_array_append_number( json_leds_color, red );
-    json_array_append_number( json_leds_color, green );
-    json_array_append_number( json_leds_color, blue );
+    JSON_Array *json_range = json_array( json_value_init_array() ), *json_rt = json_array( json_value_init_array() );;
+
+    json_array_append_string( json_rt, "oic.r.colour.rgb" );    
+    json_object_set_value( root_object, "rt", json_array_get_wrapping_value( json_rt ) );
+    json_object_set_string( root_object, "id", "c09b13e6-0b82-4700-9688-ed466212454c" );
+
+    json_array_append_number( json_rgb_value, red );
+    json_array_append_number( json_rgb_value, green );
+    json_array_append_number( json_rgb_value, blue );
     
-    json_object_dotset_value( root_object, "leds.colour", json_array_get_wrapping_value( json_leds_color ) );
+    json_object_set_value( root_object, "rgbValue", json_array_get_wrapping_value( json_rgb_value ) );
+    
+    json_array_append_number( json_range, 0 );
+    json_array_append_number( json_range, 255 );
+
+    json_object_set_value( root_object, "range", json_array_get_wrapping_value( json_range ) );
 
     json_serialize_to_buffer( root_value, payloadTemp, 250 );
     json_value_free(root_value);
@@ -196,17 +217,5 @@ void coap_create_led_resource( CoapInterface_t coap )
     ledc_fade_start( LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_1, LEDC_FADE_NO_WAIT );
     ledc_fade_start( LEDC_HIGH_SPEED_MODE, LEDC_CHANNEL_2, LEDC_FADE_NO_WAIT );
 
-    if( coap.resource_create( &led_resource, "led" ) != kCoapOK ){
-        ESP_LOGE( TAG, "coap_resource_create failed" );
-        return;
-    }
-
-    if( coap.resource_set_contnet_type( led_resource, kCoapContentTypeApplicationJson ) != kCoapOK ){
-        ESP_LOGE( TAG, "coap_resource_set_contnet_type failed" );
-        return;
-    }
-    if( coap.resource_set_callbakk( led_resource, led_requesthandler ) != kCoapOK ){
-        ESP_LOGE( TAG, "coap_resource_set_callbakk failed" );
-        return;
-    }
+    oic_register_resource( &led_oic_resource );
 }

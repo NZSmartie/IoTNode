@@ -1,5 +1,7 @@
 #include "cn-cbor/cn-cbor.h"
 #include "coap.h"
+#include "oic.h"
+
 #include "esp_log.h"
 
 
@@ -15,6 +17,15 @@ static CoapResource_t resource_oic_p;
 static CoapResource_t resource_oic_d;
 
 static uint8_t payloadTemp[250];
+
+typedef struct OICResourceList_s
+{
+    const OICResource_t* resource;
+    CoapResource_t coap_resource;
+    struct OICResourceList_s *next;
+} OICResourceList_t;
+
+static OICResourceList_t *resource_list = NULL;
 
 CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMessage_t request, CoapMessage_t response )
 {
@@ -47,6 +58,43 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
         );
 
         links = cn_cbor_array_create( NULL );
+
+        OICResourceList_t *resource = resource_list;
+        while( resource != NULL ){
+            cn_cbor *link = cn_cbor_map_create( NULL ), *linkItems;
+
+            cn_cbor_map_put( link,
+                cn_cbor_string_create( "href", NULL ),
+                cn_cbor_string_create( resource->resource->href, NULL ),
+                NULL
+            );
+
+            linkItems = cn_cbor_array_create( NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceBaseline ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.baseline", NULL ), NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceLinkLists ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.ll", NULL ), NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceBatch ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.b", NULL ), NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceReadWrite ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.rw", NULL ), NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceReadOnly ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.r", NULL ), NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceActuator ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.a", NULL ), NULL );
+            if( ( resource->resource->interfaces & kOICInterfaceSensor ) != 0)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( "oic.if.s", NULL ), NULL );
+
+            cn_cbor_map_put( link, cn_cbor_string_create( "if", NULL ), linkItems, NULL );
+
+            linkItems = cn_cbor_array_create( NULL );
+            for( int i = 0; i < resource->resource->resource_types_count; i++)
+                cn_cbor_array_append( linkItems, cn_cbor_string_create( resource->resource->resource_types[i], NULL ), NULL );
+            cn_cbor_map_put( link, cn_cbor_string_create( "rt", NULL ), linkItems, NULL );
+
+            cn_cbor_array_append( links, link, NULL );
+            resource = resource->next;
+        }
 
         cn_cbor_map_put( result, cn_cbor_string_create( "links", NULL ), links, NULL );
     } 
@@ -131,25 +179,58 @@ void oic_init ( const CoapInterface_t interface )
     // Todo: Register mandatory /oic/res, /oic/p, /oic/d
     if( coap_interface.resource_create( &resource_oic_res, "/oic/res" ) == kCoapOK )
     {
-        coap_interface.resource_set_contnet_type( resource_oic_res, kCoapContentTypeApplicationJson );
+        coap_interface.resource_set_contnet_type( resource_oic_res, kCoapContentTypeApplicationCbor );
         coap_interface.resource_set_callbakk( resource_oic_res, oic_resource_handler );
     }
     if( coap_interface.resource_create( &resource_oic_p, "/oic/p" ) == kCoapOK )
     {
-        coap_interface.resource_set_contnet_type( resource_oic_p, kCoapContentTypeApplicationJson );
+        coap_interface.resource_set_contnet_type( resource_oic_p, kCoapContentTypeApplicationCbor );
         coap_interface.resource_set_callbakk( resource_oic_p, oic_resource_handler );
     }
 
     if( coap_interface.resource_create( &resource_oic_d, "/oic/d" ) == kCoapOK )
     {
-        coap_interface.resource_set_contnet_type( resource_oic_d, kCoapContentTypeApplicationJson );
+        coap_interface.resource_set_contnet_type( resource_oic_d, kCoapContentTypeApplicationCbor );
         coap_interface.resource_set_callbakk( resource_oic_d, oic_resource_handler );
     }
 
     // Todo: register optional /oic/con, /oic/mnt
 }
 
-void oic_register_resource( const char *base_uri )
+void oic_register_resource( const OICResource_t *resource )
 {
+    OICResourceList_t *resource_item = resource_list;
 
+    ESP_LOGD( TAG, "Registering OIC resource %s", resource->href );
+
+    if( resource_list == NULL ){
+        resource_item = resource_list = malloc( sizeof( OICResourceList_t ) );
+        ESP_LOGD( TAG, "Creating new resource list" );
+    } 
+    else 
+    {
+        while( resource_item->next != NULL )
+            resource_item = resource_item->next;
+        resource_item->next = malloc( sizeof( OICResourceList_t ) );
+        resource_item = resource_item->next;
+        ESP_LOGD( TAG, "Added new resource to the list" );
+    }
+
+    resource_item->resource = resource;
+    resource_item->next = NULL;
+
+    if( coap_interface.resource_create( &resource_item->coap_resource, resource->href ) != kCoapOK ){
+        ESP_LOGE( TAG, "coap_resource_create failed" );
+        return;
+    }
+
+    if( coap_interface.resource_set_contnet_type( resource_item->coap_resource, kCoapContentTypeApplicationJson ) != kCoapOK ){
+        ESP_LOGE( TAG, "coap_resource_set_contnet_type failed" );
+        return;
+    }
+    
+    if( coap_interface.resource_set_callbakk( resource_item->coap_resource, resource_item->resource->callback ) != kCoapOK ){
+        ESP_LOGE( TAG, "coap_resource_set_callbakk failed" );
+        return;
+    }
 }
