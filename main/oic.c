@@ -2,6 +2,12 @@
 #include "coap.h"
 #include "oic.h"
 
+#ifdef LOG_LOCAL_LEVEL
+    #undef LOG_LOCAL_LEVEL
+#endif 
+
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+
 #include "esp_log.h"
 
 
@@ -40,18 +46,26 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
         coap_interface.message_set_code( response, kCoapMessageCodeMethodNotAllowed );
         return kCoapOK;
     }
-
-    result = cn_cbor_map_create( NULL );
     
     if( resource == resource_oic_res )
     {
-        cn_cbor_map_put( result,
+        result = cn_cbor_array_create( NULL );
+
+        cn_cbor *map = cn_cbor_map_create( NULL );
+
+        cn_cbor_map_put( map,
             cn_cbor_string_create( "n", NULL ),
             cn_cbor_string_create( CONFIG_IOTNODE_HOSTNAME, NULL ),
             NULL
         );
 
-        cn_cbor_map_put( result,
+        {
+            cn_cbor *rt = cn_cbor_array_create( NULL );
+            cn_cbor_array_append( rt, cn_cbor_string_create( "oic.wk.res", NULL ), NULL );
+            cn_cbor_map_put( map, cn_cbor_string_create( "rt", NULL ), rt, NULL );
+        }
+        
+        cn_cbor_map_put( map,
             cn_cbor_string_create( "di", NULL ),
             cn_cbor_string_create( OIC_DEVICE_UUID, NULL ),
             NULL
@@ -96,10 +110,14 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
             resource = resource->next;
         }
 
-        cn_cbor_map_put( result, cn_cbor_string_create( "links", NULL ), links, NULL );
+        cn_cbor_map_put( map, cn_cbor_string_create( "links", NULL ), links, NULL );
+
+        cn_cbor_array_append( result, map , NULL );
     } 
     else if( resource == resource_oic_p )
     {
+        result = cn_cbor_map_create( NULL );
+
         cn_cbor_map_put( result,
             cn_cbor_string_create( "pi", NULL ),
             cn_cbor_string_create( OIC_PLATFORM_UUID, NULL ),
@@ -132,6 +150,8 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
     } 
     else if( resource == resource_oic_d )
     {
+        result = cn_cbor_map_create( NULL );
+
          cn_cbor_map_put( result,
             cn_cbor_string_create( "n", NULL ),
             cn_cbor_string_create( CONFIG_IOTNODE_HOSTNAME, NULL ),
@@ -159,7 +179,6 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
     {
         coap_interface.message_set_code( response, kCoapMessageCodeNotFound );
 
-        cn_cbor_free( result );
         return kCoapOK;
     }
 
