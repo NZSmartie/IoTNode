@@ -21,6 +21,7 @@ static CoapResult_t led_requesthandler( const CoapResource_t resource, const Coa
 CoapResource_t led_resource = NULL;
 OICResource_t led_oic_resource = {
     .href = "/leds",
+    .name = "FUCKING RAINBOW LEDS!",
     .interfaces = kOICInterfaceBaseline | kOICInterfaceActuator,
     .callback = led_requesthandler,
     .resource_types_count = 1,
@@ -64,13 +65,24 @@ static CoapResult_t led_requesthandler( const CoapResource_t resource, const Coa
     JSON_Object *root_object;
     JSON_Array *json_rgb_value;
 
-    uint32_t accept = 0;
-    if( _coap.message_get_option_uint( request, kCoapOptionAccept, &accept ) != kCoapOK )
-        accept = kCoapContentTypeApplicationJson;
+    uint32_t accept = kCoapContentTypeApplicationJson;
+    CoapOption_t accept_option;
+
+    _coap.message_get_option( request, kCoapOptionAccept, &accept_option );
+    while( accept_option != NULL )
+    {
+        if( _coap.option_get_uint( accept_option, &accept ) != kCoapOK )
+            break;
+        if( accept == kCoapContentTypeApplicationJson )
+            break;
+        
+        if( _coap.option_get_next( &accept_option ) != kCoapOK )
+            break;
+    }
 
     if( accept != kCoapContentTypeApplicationJson )
     {
-        ESP_LOGE( TAG, "message_get_option_uint: Accept Option (%d) != %d", accept, kCoapMessageCodeBadOption )
+        ESP_LOGE( TAG, "application/json is the only acception option" );
         _coap.message_set_code( response, kCoapMessageCodeBadOption );
         return kCoapError;
     }

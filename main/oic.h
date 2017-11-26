@@ -19,6 +19,7 @@ typedef enum
 typedef struct OICResource_s
 {
     char* href;
+    char* name;
     OICInterface_t interfaces;
     CoapResourceCallback_t callback;
     size_t resource_types_count;

@@ -64,7 +64,7 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
             cn_cbor_array_append( rt, cn_cbor_string_create( "oic.wk.res", NULL ), NULL );
             cn_cbor_map_put( map, cn_cbor_string_create( "rt", NULL ), rt, NULL );
         }
-        
+
         cn_cbor_map_put( map,
             cn_cbor_string_create( "di", NULL ),
             cn_cbor_string_create( OIC_DEVICE_UUID, NULL ),
@@ -105,6 +105,14 @@ CoapResult_t oic_resource_handler( const CoapResource_t resource, const CoapMess
             for( int i = 0; i < resource->resource->resource_types_count; i++)
                 cn_cbor_array_append( linkItems, cn_cbor_string_create( resource->resource->resource_types[i], NULL ), NULL );
             cn_cbor_map_put( link, cn_cbor_string_create( "rt", NULL ), linkItems, NULL );
+
+            if(resource->resource->name != NULL && resource->resource->name[0] != '\0'){
+                cn_cbor_map_put( link,
+                    cn_cbor_string_create( "title", NULL ),
+                    cn_cbor_string_create( resource->resource->name, NULL ),
+                    NULL
+                );
+            }
 
             cn_cbor_array_append( links, link, NULL );
             resource = resource->next;
