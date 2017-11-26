@@ -395,8 +395,46 @@ static CoapResult_t coap_message_get_option_uint( const CoapMessage_t message, c
     if( pOpt == NULL )
         return kCoapError;
 
-    *value = CoAP_GetAcceptOptionVal( pOpt );
+    return CoAP_GetUintFromOption( pOpt, value ) == COAP_OK ? kCoapOK : kCoapError;
+}
+
+static CoapResult_t coap_message_get_option( const CoapMessage_t message, const uint16_t option_number, CoapOption_t *option ){
+    const CoAP_Message_t *pMsg = (CoAP_Message_t*)message;
+    *option = NULL;
+
+    CoAP_option_t *pOpt = CoAP_FindOptionByNumber( (CoAP_Message_t*)pMsg, option_number );
+    if( pOpt == NULL )
+        return kCoapError;
+
+    *option = (CoapOption_t)pOpt;
     return kCoapOK;
+}
+
+static CoapResult_t coap_option_get_next( CoapOption_t* option ){
+    const CoAP_option_t *pOpt = *option;
+    uint16_t optionNumber = pOpt->Number;
+
+    while(pOpt->next != NULL){
+        pOpt = pOpt->next;
+
+        if(pOpt->Number == optionNumber){
+            *option = (CoapOption_t)pOpt;
+            return kCoapOK;
+        }
+    }
+
+    return kCoapError;
+}
+
+static CoapResult_t coap_option_get_uint( const CoapOption_t option, uint32_t* value )
+{
+    return CoAP_GetUintFromOption( option, value ) == COAP_OK ? kCoapOK : kCoapError;
+}
+
+static CoapResult_t coap_message_add_option( CoapMessage_t message, const CoapOption_t option ){
+    CoAP_Result_t result = CoAP_CopyOptionToList( &(((CoAP_Message_t*)message)->pOptionsList), (CoAP_option_t*)option);
+        
+    return (result == COAP_OK) ? kCoapOK: kCoapError;
 }
 
 static CoapResult_t coap_message_get_code( const CoapMessage_t message, uint8_t *code )
@@ -441,10 +479,16 @@ __attribute__((const)) CoapInterface_t CoapGetInterface( void )
     return (CoapInterface_t){
         .message_get_option_uint   = coap_message_get_option_uint,
         .message_add_option_uint   = coap_message_add_option_uint,
+        .message_get_option        = coap_message_get_option,
+        .message_add_option        = coap_message_add_option,
         .message_set_code          = coap_message_set_code,
         .message_get_code          = coap_message_get_code,
         .message_get_payload       = coap_message_get_payload,
         .message_set_payload       = coap_message_set_payload,
+        
+        .option_get_next           = coap_option_get_next,
+        .option_get_uint           = coap_option_get_uint,
+
         .resource_create           = coap_resource_create,
         .resource_set_contnet_type = coap_resource_set_contnet_type,
         .resource_set_callbakk     = coap_resource_set_callbakk,

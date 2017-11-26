@@ -93,6 +93,7 @@ typedef struct {
     CoapDtlsOptions_t DTLS;
 } CoapOptions_t;
 
+typedef void *CoapOption_t;
 typedef void *CoapMessage_t;
 typedef void *CoapResource_t;
 
@@ -102,10 +103,15 @@ typedef CoapResult_t (*CoapResourceCallback_t)( const CoapResource_t resource, c
 
 typedef CoapResult_t (*coap_message_get_option_uint_t)( const CoapMessage_t message, const uint16_t option, uint32_t *value );
 typedef CoapResult_t (*coap_message_add_option_uint_t)( CoapMessage_t message, uint16_t option, uint32_t code );
+typedef CoapResult_t (*coap_message_get_option_t)( const CoapMessage_t message, const uint16_t option_number, CoapOption_t *option );
+typedef CoapResult_t (*coap_message_add_option_t)( CoapMessage_t message, const CoapOption_t option );
 typedef CoapResult_t (*coap_message_get_code_t)( const CoapMessage_t message, uint8_t *code );
 typedef CoapResult_t (*coap_message_set_code_t)( CoapMessage_t message, uint8_t code );
 typedef CoapResult_t (*coap_message_get_payload_t)( const CoapMessage_t message, uint8_t **payload, size_t *length );
 typedef CoapResult_t (*coap_message_set_payload_t)( CoapMessage_t message, uint8_t *payload, size_t length );
+
+typedef CoapResult_t (*coap_option_get_next_t)( CoapOption_t* option );
+typedef CoapResult_t (*coap_option_get_uint_t)( const CoapOption_t option, uint32_t* value );
 
 typedef CoapResult_t (*coap_resource_create_t)( CoapResource_t *resource, const char* uri );
 typedef CoapResult_t (*coap_resource_set_contnet_type_t)( CoapResource_t resource, uint16_t content_type );
@@ -116,10 +122,15 @@ typedef CoapResult_t (*coap_unregister_reesource_t)( const CoapResource_t resour
 typedef struct{
     coap_message_get_option_uint_t   message_get_option_uint;
     coap_message_add_option_uint_t   message_add_option_uint;
+    coap_message_get_option_t        message_get_option;
+    coap_message_add_option_t        message_add_option;
     coap_message_get_code_t          message_get_code;
     coap_message_set_code_t          message_set_code;
     coap_message_get_payload_t       message_get_payload;
     coap_message_set_payload_t       message_set_payload;
+
+    coap_option_get_next_t           option_get_next;
+    coap_option_get_uint_t           option_get_uint;
 
     coap_resource_create_t           resource_create;
     coap_resource_set_contnet_type_t resource_set_contnet_type;
