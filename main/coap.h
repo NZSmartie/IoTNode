@@ -25,7 +25,7 @@ enum CoapConstraints : unsigned long long
     MaxOptionSize = 10,
 };
 
-enum class CoapContentType {
+enum CoapContentType : int {
     TextPlain = 0,
 	LinkFormat = 40,
 	ApplicationXml = 41,
@@ -115,6 +115,9 @@ public:
     {
         return (TInterface *)_allocation;
     }
+
+    operator TInterface*() { return (TInterface *)_allocation; }
+    operator TInterface const *() const { return (TInterface const *)_allocation; }
 };
 
 struct CoapDtlsOptions
@@ -172,12 +175,15 @@ public:
     virtual ~ICoapMessage(){}
     // virtual void GetOption_uint(const uint16_t option, uint32_t *value, CoapResult &result);
     // virtual void AddOption_uint(uint16_t option, uint32_t code, CoapResult &result);
-    virtual CoapOption GetOption(const uint16_t number, CoapResult &result) = 0;
+    virtual CoapOption GetOption(const uint16_t number, CoapResult &result) const = 0;
     virtual void AddOption(ICoapOption const *option, CoapResult &result) = 0;
     virtual CoapMessageCode GetCode(CoapResult &result) const = 0;
     virtual void SetCode(CoapMessageCode code, CoapResult &result) = 0;
     virtual Payload GetPayload(CoapResult &result) const = 0;
-    virtual void SetPayload(const Payload &payload, CoapResult &result) = 0;
+    virtual void SetPayload(Payload const &payload, CoapResult &result) = 0;
+
+    template<class T>
+    void SetPayload(T const &something, CoapResult &result) { this->SetPayload(Payload((const uint8_t *)something.data(), something.length()), result); }
 };
 
 class ICoapResource
@@ -273,5 +279,17 @@ public:
         return nullptr;
     }
 };
+
+inline CoapEmptyOption *AsEmpty(ICoapOption &option) { assert(option.Type == CoapOptionType::Empty); return static_cast<CoapEmptyOption*>(&option);}
+inline CoapEmptyOption *AsEmpty(ICoapOption *option) { assert(option->Type == CoapOptionType::Empty); return static_cast<CoapEmptyOption*>(option);}
+
+inline CoapOpaqueOption *AsOpaque(ICoapOption &option) { assert(option.Type == CoapOptionType::Opaque); return static_cast<CoapOpaqueOption*>(&option);}
+inline CoapOpaqueOption *AsOpaque(ICoapOption *option) { assert(option->Type == CoapOptionType::Opaque); return static_cast<CoapOpaqueOption*>(option);}
+
+inline CoapStringOption *AsString(ICoapOption &option) { assert(option.Type == CoapOptionType::String); return static_cast<CoapStringOption*>(&option);}
+inline CoapStringOption *AsString(ICoapOption *option) { assert(option->Type == CoapOptionType::String); return static_cast<CoapStringOption*>(option);}
+
+inline CoapUIntOption *AsUInt(ICoapOption &option) { assert(option.Type == CoapOptionType::UInt); return static_cast<CoapUIntOption*>(&option);}
+inline CoapUIntOption *AsUInt(ICoapOption *option) { assert(option->Type == CoapOptionType::UInt); return static_cast<CoapUIntOption*>(option);}
 
 #endif /* __MAIN_COAP_ */

@@ -372,7 +372,7 @@ void LobaroCoapResource::RegisterHandler(CoapMessageCode requestType, CoapResult
 //     return CoAP_GetUintFromOption( pOpt, value ) == COAP_OK ? kCoapOK : kCoapError;
 // }
 
-CoapOption LobaroCoapMessage::GetOption(const uint16_t number, CoapResult &result)
+CoapOption LobaroCoapMessage::GetOption(const uint16_t number, CoapResult &result) const
 {
     CoapOption option;
     CoapOptionType type = CoapOptionType::Empty;

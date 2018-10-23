@@ -1,4 +1,6 @@
-#include <string.h>
+#include <cstring>
+#include <sstream>
+#include <string>
 
 #include "esp_log.h"
 #include "parson.h"
@@ -9,16 +11,13 @@
 static const char *TAG = "CoAP Resource";
 
 void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *response, CoapResult &result)
-// static void wifi_ipconfig_requesthandler(coap_context_t  *context, struct coap_resource_t *resource, const coap_endpoint_t *endpoint, coap_address_t *address, coap_pdu_t *, str *token, coap_pdu_t *response)
 {
-    response->SetCode(CoapMessageCode::Unauthorized, result);
-    response->SetPayload(Payload(), result);
-
-	// tcpip_adapter_ip_info_t ipinfo;
+	//tcpip_adapter_ip_info_t ipinfo;
 	// char payloadTemp[250], ip_address[16], ip_mask[16], ip_gateway[16];
 	// char* pStrWorking = payloadTemp;
 
-    // uint16_t accept = CoAP_GetAcceptOptionValFromMsg(pReq);
+    auto acceptOption = request->GetOption(CoapOptionValue::Accept, result);
+    uint32_t accept = result == CoapResult::OK ? (CoapContentType)AsUInt(acceptOption)->Value : CoapContentType::TextPlain;
 
 	// if( tcpip_adapter_get_ip_info( TCPIP_ADAPTER_IF_STA, &ipinfo ) != ESP_OK )
     // {
@@ -26,15 +25,14 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
     //     return HANDLER_ERROR;
     // }
 
-    // if( accept == COAP_CF_TEXT_PLAIN)
-    // {
-    //     pStrWorking += sprintf( (char*) pStrWorking, "IP: " IPSTR ", Mask: " IPSTR ", Gateway: " IPSTR,
-    //         IP2STR( &ipinfo.ip ),
-    //         IP2STR( &ipinfo.netmask ),
-    //         IP2STR( &ipinfo.gw ) );
-    // }
-    // else if( accept == COAP_CF_JSON )
-    // {
+    if(accept == CoapContentType::TextPlain)
+    {
+        std::ostringstream output;
+        output << "Ohai :3"; //"IP: "  << IP2STR( &ipinfo.ip )  << ", Mask: " << IP2STR( &ipinfo.netmask ) << ", Gateway: " << IP2STR( &ipinfo.gw );
+        response->SetPayload(output.str(), result);
+    }
+    else if(accept == CoapContentType::ApplicationJson)
+    {
     //     JSON_Value *root_value = json_value_init_object();
     //     JSON_Object *root_object = json_value_get_object(root_value);
 
@@ -49,9 +47,10 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
     //     json_value_free(root_value);
 
     //     CoAP_AddCfOptionToMsg( pResp, COAP_CF_JSON );
-    // }
-    // else if( accept == COAP_CF_CBOR )
-    // {
+        response->SetCode(CoapMessageCode::NotImplemented, result);
+    }
+    else if(accept == CoapContentType::ApplicationCbor)
+    {
     //     cn_cbor *map, *wifi;
     //     size_t enc_sz;
 
@@ -86,15 +85,15 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
     //     CoAP_AddCfOptionToMsg( pResp, COAP_CF_CBOR );
     //     CoAP_SetPayload( pResp, (uint8_t*) payloadTemp, enc_sz, true );
     //     return HANDLER_OK;
-    // }
-    // else
-    // {
-    //     pResp->Code = RESP_BAD_OPTION_4_02;
-    //     return HANDLER_ERROR;
-    // }
+        response->SetCode(CoapMessageCode::NotImplemented, result);
+    }
+    else
+    {
+        response->SetCode(CoapMessageCode::BadOption, result);
+        result = CoapResult::Error;
+    }
 
     // CoAP_SetPayload( pResp, (uint8_t*) payloadTemp, strlen( payloadTemp ), true );
-    result = CoapResult::Error;
 }
 
 WifiResource::WifiResource(ICoapInterface& coap)

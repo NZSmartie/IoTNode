@@ -56,7 +56,7 @@ public:
     LobaroCoapMessage(CoAP_Message_t *message)
         : _message(message) {}
 
-    CoapOption GetOption(const uint16_t number, CoapResult &result);
+    CoapOption GetOption(const uint16_t number, CoapResult &result) const;
     void AddOption(ICoapOption const *option, CoapResult &result);
 
     CoapMessageCode GetCode(CoapResult &result) const;
