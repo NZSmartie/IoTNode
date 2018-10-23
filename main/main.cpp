@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
@@ -12,11 +14,8 @@
 
 #include "esp_log.h"
 
-#include "interfaces/lobaro-coap.h"
-#include "coap.h"
-#include "oic.h"
-
-#include "resources/leds.h"
+#include "interfaces/lobarocoap.h"
+#include "resources/wifi.h"
 
 static const char* TAG = "IoTNode";
 static bool connected = false;
@@ -28,22 +27,6 @@ static EventGroupHandle_t wifi_event_group;
 #if !defined( WIFI_SSID ) || !defined( WIFI_PASSWORD )
     #error WIFI_SSID or WIFI_PASSWORD not set in secrets file. See secrets.example
 #endif
-
-extern const unsigned char iotnode_crt[]     asm("_binary_iotnode_crt_start");
-extern const unsigned char iotnode_crt_end[] asm("_binary_iotnode_crt_end");
-
-extern const unsigned char iotnode_key[]     asm("_binary_iotnode_key_start");
-extern const unsigned char iotnode_key_end[] asm("_binary_iotnode_key_end");
-
-CoapOptions_t coap_options = ( CoapOptions_t ){
-    .flags = {
-        .useDTLS = 1
-    },
-    .DTLS = {
-        .cert_ptr = iotnode_crt,
-        .cert_key_ptr = iotnode_key,
-    }
-};
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -71,28 +54,20 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
     return ESP_OK;
 }
 
+extern "C"
 void app_main(void)
 {
-    coap_options.DTLS.cert_len = iotnode_crt_end - iotnode_crt;
-    coap_options.DTLS.cert_key_len = iotnode_key_end - iotnode_key;  
-
-
     wifi_event_group = xEventGroupCreate();
 
     nvs_flash_init();
     tcpip_adapter_init();
 
-    // Gets the coap interface that's implemeented by a library
-    CoapInterface_t coap_interface = CoapGetInterface();
-    
-    // Initiallise our CoAP Protocol handler
-    if( coap_init( coap_interface, &coap_options, wifi_event_group ) != kCoapOK )
-        ESP_LOGE( TAG, "Failed to initialise coap" );
+    CoapResult result;
+    LobaroCoap coap_interface(result);
+    assert(result == CoapResult::OK);
 
-    // Initialise the OIC handler 
-    oic_init( coap_interface );
-
-    coap_create_led_resource( coap_interface );
+    // Create and register our wifi resource
+    WifiResource wifiResource(coap_interface);
 
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 
@@ -100,13 +75,12 @@ void app_main(void)
     ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
     ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
-    wifi_config_t sta_config = {
-        .sta = {
-            .ssid = STRING( WIFI_SSID ),
-            .password = STRING( WIFI_PASSWORD ),
-            .bssid_set = false
-        }
-    };
+
+    wifi_config_t sta_config = {};
+    std::strcpy((char*)sta_config.sta.ssid, STRING(WIFI_SSID));
+    std::strcpy((char*)sta_config.sta.password, STRING(WIFI_PASSWORD));
+    sta_config.sta.bssid_set = false;
+
     ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &sta_config) );
 
     ESP_ERROR_CHECK( esp_wifi_start() );
@@ -124,4 +98,3 @@ void app_main(void)
             vTaskDelay(250 / portTICK_PERIOD_MS);
     }
 }
-

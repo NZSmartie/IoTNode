@@ -1,144 +1,277 @@
 #ifndef __MAIN_COAP_
 #define __MAIN_COAP_
 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <tuple>
+#include <type_traits>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
-#define COAP_THREAD_NAME "coap"
-#define COAP_THREAD_STACK_SIZE_WORDS 10240
-#define COAP_THREAD_PRIORITY 8
-
-typedef enum 
+enum class CoapResult
 {
-    kCoapOK = 0,
-    kCoapError,
-    kCoapPostpone,
-} CoapResult_t;
-
-enum CoapContentType {
-    kCoapContentTypeTextPlain = 0,
-	kCoapContentTypeLinkFormat = 40,
-	kCoapContentTypeApplicationXml = 41,
-	kCoapContentTypeApplicationOctetStream = 42,
-	kCoapContentTypeApplicationExi = 47,
-	kCoapContentTypeApplicationJson = 50,
-	kCoapContentTypeApplicationCbor = 60
+    OK = 0,
+    Error,
+    Postpone,
 };
 
-enum CoapOption {
-    kCoapOptionIfMatch = 1,
-    kCoapOptionUriHost = 3,
-    kCoapOptionETag = 4,
-    kCoapOptionIfNoneMatch = 5,
-    kCoapOptionUriPort = 7,
-    kCoapOptionLocationPath = 8,
-    kCoapOptionUriPath = 11,
-    kCoapOptionContentFormat = 12,
-    kCoapOptionMaxAge = 14,
-    kCoapOptionUriQuery = 15,
-    kCoapOptionAccept = 17,
-    kCoapOptionLocationQuery = 20,
-    kCoapOptionProxyUri = 35,
-    kCoapOptionProxyScheme = 39,
-    kCoapOptionSize1 = 60,
+// TODO: Adjust these max sizes
+enum CoapConstraints : unsigned long long
+{
+    MaxResourceSize = 10,
+    MaxMessageSize = 10,
+    MaxOptionSize = 10,
 };
+
+enum class CoapContentType {
+    TextPlain = 0,
+	LinkFormat = 40,
+	ApplicationXml = 41,
+	ApplicationOctetStream = 42,
+	ApplicationExi = 47,
+	ApplicationJson = 50,
+	ApplicationCbor = 60
+};
+
+enum CoapOptionValue : int {
+    IfMatch = 1,
+    UriHost = 3,
+    ETag = 4,
+    IfNoneMatch = 5,
+    UriPort = 7,
+    LocationPath = 8,
+    UriPath = 11,
+    ContentFormat = 12,
+    MaxAge = 14,
+    UriQuery = 15,
+    Accept = 17,
+    LocationQuery = 20,
+    ProxyUri = 35,
+    ProxyScheme = 39,
+    Size1 = 60,
+};
+
+enum class CoapOptionType
+{
+    Empty,
+    Opaque,
+    UInt,
+    String,
+};
+
+extern std::tuple<CoapOptionValue, CoapOptionType> const CoapOptiontypeMap[];
 
 #define MESSAGE_CODE_FROM_CLASS_CODE(CLASS, CODE) ( (CLASS <<5) | CODE )
-enum CoapMessageCode {
+enum CoapMessageCode : int {
     None = 0,
     // 0.xx Request
-    kCoapMessageCodeGet = 1,
-    kCoapMessageCodePost = 2,
-    kCoapMessageCodePut = 3,
-    kCoapMessageCodeDelete = 4,
+    Get = 1,
+    Post = 2,
+    Put = 3,
+    Delete = 4,
     // 2.xx Success
-    kCoapMessageCodeCreated = MESSAGE_CODE_FROM_CLASS_CODE( 2, 01),
-    kCoapMessageCodeDeleted = MESSAGE_CODE_FROM_CLASS_CODE( 2, 02),
-    kCoapMessageCodeValid   = MESSAGE_CODE_FROM_CLASS_CODE( 2, 03),
-    kCoapMessageCodeChanged = MESSAGE_CODE_FROM_CLASS_CODE( 2, 04),
-    kCoapMessageCodeContent = MESSAGE_CODE_FROM_CLASS_CODE( 2, 05),
+    Created = MESSAGE_CODE_FROM_CLASS_CODE( 2, 01),
+    Deleted = MESSAGE_CODE_FROM_CLASS_CODE( 2, 02),
+    Valid   = MESSAGE_CODE_FROM_CLASS_CODE( 2, 03),
+    Changed = MESSAGE_CODE_FROM_CLASS_CODE( 2, 04),
+    Content = MESSAGE_CODE_FROM_CLASS_CODE( 2, 05),
     // 4.xx Client Error
-    kCoapMessageCodeBadRequest               = MESSAGE_CODE_FROM_CLASS_CODE( 4, 00),
-    kCoapMessageCodeUnauthorized             = MESSAGE_CODE_FROM_CLASS_CODE( 4, 01),
-    kCoapMessageCodeBadOption                = MESSAGE_CODE_FROM_CLASS_CODE( 4, 02),
-    kCoapMessageCodeForbidden                = MESSAGE_CODE_FROM_CLASS_CODE( 4, 03),
-    kCoapMessageCodeNotFound                 = MESSAGE_CODE_FROM_CLASS_CODE( 4, 04),
-    kCoapMessageCodeMethodNotAllowed         = MESSAGE_CODE_FROM_CLASS_CODE( 4, 05),
-    kCoapMessageCodeNotAcceptable            = MESSAGE_CODE_FROM_CLASS_CODE( 4, 06),
-    kCoapMessageCodePreconditionFailed       = MESSAGE_CODE_FROM_CLASS_CODE( 4, 12),
-    kCoapMessageCodeRequestEntityTooLarge    = MESSAGE_CODE_FROM_CLASS_CODE( 4, 13),
-    kCoapMessageCodeUnsupportedContentFormat = MESSAGE_CODE_FROM_CLASS_CODE( 4, 15),
+    BadRequest               = MESSAGE_CODE_FROM_CLASS_CODE( 4, 00),
+    Unauthorized             = MESSAGE_CODE_FROM_CLASS_CODE( 4, 01),
+    BadOption                = MESSAGE_CODE_FROM_CLASS_CODE( 4, 02),
+    Forbidden                = MESSAGE_CODE_FROM_CLASS_CODE( 4, 03),
+    NotFound                 = MESSAGE_CODE_FROM_CLASS_CODE( 4, 04),
+    MethodNotAllowed         = MESSAGE_CODE_FROM_CLASS_CODE( 4, 05),
+    NotAcceptable            = MESSAGE_CODE_FROM_CLASS_CODE( 4, 06),
+    PreconditionFailed       = MESSAGE_CODE_FROM_CLASS_CODE( 4, 12),
+    RequestEntityTooLarge    = MESSAGE_CODE_FROM_CLASS_CODE( 4, 13),
+    UnsupportedContentFormat = MESSAGE_CODE_FROM_CLASS_CODE( 4, 15),
     // 5.xx Server Error
-    kCoapMessageCodeInternalServerError  = MESSAGE_CODE_FROM_CLASS_CODE( 5, 00),
-    kCoapMessageCodeNotImplemented       = MESSAGE_CODE_FROM_CLASS_CODE( 5, 01),
-    kCoapMessageCodeBadGateway           = MESSAGE_CODE_FROM_CLASS_CODE( 5, 02),
-    kCoapMessageCodeServiceUnavailable   = MESSAGE_CODE_FROM_CLASS_CODE( 5, 03),
-    kCoapMessageCodeGatewayTimeout       = MESSAGE_CODE_FROM_CLASS_CODE( 5, 04),
-    kCoapMessageCodeProxyingNotSupported = MESSAGE_CODE_FROM_CLASS_CODE( 5, 05)
+    InternalServerError  = MESSAGE_CODE_FROM_CLASS_CODE( 5, 00),
+    NotImplemented       = MESSAGE_CODE_FROM_CLASS_CODE( 5, 01),
+    BadGateway           = MESSAGE_CODE_FROM_CLASS_CODE( 5, 02),
+    ServiceUnavailable   = MESSAGE_CODE_FROM_CLASS_CODE( 5, 03),
+    GatewayTimeout       = MESSAGE_CODE_FROM_CLASS_CODE( 5, 04),
+    ProxyingNotSupported = MESSAGE_CODE_FROM_CLASS_CODE( 5, 05)
 };
 
-typedef struct 
+template<class TInterface, int MaxSize>
+class StackAllocator
+{
+    char _allocation[MaxSize];
+public:
+    TInterface *operator->()
+    {
+        return (TInterface*)_allocation;
+    }
+    TInterface const *operator->() const
+    {
+        return (TInterface const *)_allocation;
+    }
+
+    TInterface *get()
+    {
+        return (TInterface *)_allocation;
+    }
+};
+
+struct CoapDtlsOptions
 {
     const unsigned char *cert_ptr;
     size_t cert_len;
 
     const unsigned char *cert_key_ptr;
     size_t cert_key_len;
-} CoapDtlsOptions_t;
+};
 
-typedef struct {
+struct CoapOptions
+{
     struct {
         unsigned char useDTLS: 1;
     } flags;
-    CoapDtlsOptions_t DTLS;
-} CoapOptions_t;
+    CoapDtlsOptions DTLS;
+};
 
-typedef void *CoapOption_t;
-typedef void *CoapMessage_t;
-typedef void *CoapResource_t;
+typedef void* CoapOption_t;
+typedef void* CoapMessage_t;
 
 extern const int kCoapConnectedBit;
+// typedef CoapResult (*CoapResourceCallback_t)( const CoapResource_t, const CoapMessage_t, CoapMessage_t );
 
-typedef CoapResult_t (*CoapResourceCallback_t)( const CoapResource_t resource, const CoapMessage_t request, CoapMessage_t response );
+class ICoapResource;
+class ICoapMessage;
+class ICoapOption;
+using CoapResource = StackAllocator<ICoapResource, CoapConstraints::MaxResourceSize>;
+using CoapMessage = StackAllocator<ICoapMessage, CoapConstraints::MaxMessageSize>;
+using CoapOption = StackAllocator<ICoapOption, CoapConstraints::MaxOptionSize>;
 
-typedef CoapResult_t (*coap_message_get_option_uint_t)( const CoapMessage_t message, const uint16_t option, uint32_t *value );
-typedef CoapResult_t (*coap_message_add_option_uint_t)( CoapMessage_t message, uint16_t option, uint32_t code );
-typedef CoapResult_t (*coap_message_get_option_t)( const CoapMessage_t message, const uint16_t option_number, CoapOption_t *option );
-typedef CoapResult_t (*coap_message_add_option_t)( CoapMessage_t message, const CoapOption_t option );
-typedef CoapResult_t (*coap_message_get_code_t)( const CoapMessage_t message, uint8_t *code );
-typedef CoapResult_t (*coap_message_set_code_t)( CoapMessage_t message, uint8_t code );
-typedef CoapResult_t (*coap_message_get_payload_t)( const CoapMessage_t message, uint8_t **payload, size_t *length );
-typedef CoapResult_t (*coap_message_set_payload_t)( CoapMessage_t message, uint8_t *payload, size_t length );
+using Payload = std::basic_string<uint8_t>;
 
-typedef CoapResult_t (*coap_option_get_next_t)( CoapOption_t* option );
-typedef CoapResult_t (*coap_option_get_uint_t)( const CoapOption_t option, uint32_t* value );
+class IApplicationResource
+{
+public:
+    virtual void HandleRequest(ICoapMessage const *request, ICoapMessage *response, CoapResult &result) { result = CoapResult::Error; };
+    virtual ~IApplicationResource() {};
+};
 
-typedef CoapResult_t (*coap_resource_create_t)( CoapResource_t *resource, const char* uri );
-typedef CoapResult_t (*coap_resource_set_contnet_type_t)( CoapResource_t resource, uint16_t content_type );
-typedef CoapResult_t (*coap_resource_set_callbakk_t)( CoapResource_t resource, CoapResourceCallback_t callback );
+class ICoapInterface {
+public:
+    virtual ~ICoapInterface() {};
 
-typedef CoapResult_t (*coap_unregister_reesource_t)( const CoapResource_t resource );
+    // CoapResult option_get_next( CoapOption_t* option );
+    // CoapResult option_get_uint( const CoapOption_t option, uint32_t* value );
 
-typedef struct{
-    coap_message_get_option_uint_t   message_get_option_uint;
-    coap_message_add_option_uint_t   message_add_option_uint;
-    coap_message_get_option_t        message_get_option;
-    coap_message_add_option_t        message_add_option;
-    coap_message_get_code_t          message_get_code;
-    coap_message_set_code_t          message_set_code;
-    coap_message_get_payload_t       message_get_payload;
-    coap_message_set_payload_t       message_set_payload;
+    virtual CoapResource CreateResource(IApplicationResource * const applicationResource, const char* uri , CoapResult &result) = 0;
+};
 
-    coap_option_get_next_t           option_get_next;
-    coap_option_get_uint_t           option_get_uint;
+class ICoapMessage
+{
+public:
+    virtual ~ICoapMessage(){}
+    // virtual void GetOption_uint(const uint16_t option, uint32_t *value, CoapResult &result);
+    // virtual void AddOption_uint(uint16_t option, uint32_t code, CoapResult &result);
+    virtual CoapOption GetOption(const uint16_t number, CoapResult &result) = 0;
+    virtual void AddOption(ICoapOption const *option, CoapResult &result) = 0;
+    virtual CoapMessageCode GetCode(CoapResult &result) const = 0;
+    virtual void SetCode(CoapMessageCode code, CoapResult &result) = 0;
+    virtual Payload GetPayload(CoapResult &result) const = 0;
+    virtual void SetPayload(const Payload &payload, CoapResult &result) = 0;
+};
 
-    coap_resource_create_t           resource_create;
-    coap_resource_set_contnet_type_t resource_set_contnet_type;
-    coap_resource_set_callbakk_t     resource_set_callbakk;
+class ICoapResource
+{
+protected:
+    IApplicationResource * const applicationResource;
+public:
+    ICoapResource(IApplicationResource * const applicationResource)
+        : applicationResource(applicationResource) {}
+    virtual void RegisterHandler(CoapMessageCode requestType, CoapResult &result) = 0;
 
-    coap_unregister_reesource_t      unregister_reesource;
-} CoapInterface_t;
+    void RegisterHandler(CoapResult &result)
+    {
+        this->RegisterHandler(CoapMessageCode::Get, result);
+    }
 
-CoapResult_t coap_init( const CoapInterface_t interface, const CoapOptions_t *options, EventGroupHandle_t wifi_events );
+    virtual ~ICoapResource() {}
+};
+
+class ICoapOption
+{
+public:
+    uint16_t const Number;
+    CoapOptionType const Type;
+
+    ICoapOption(CoapOptionType type, uint16_t number)
+        : Number(number), Type(type){}
+    virtual ~ICoapOption(){}
+
+    virtual size_t GetSize() const = 0;
+    virtual void const * GetPtr() const = 0;
+};
+
+class CoapEmptyOption : public ICoapOption
+{
+public:
+    CoapEmptyOption(uint16_t number)
+        : ICoapOption(CoapOptionType::Empty, number) {}
+    ~CoapEmptyOption(){}
+
+    size_t GetSize() const { return 0; }
+    void const * GetPtr() const {return nullptr; }
+};
+
+class CoapOpaqueOption : public ICoapOption
+{
+public:
+    Payload Data;
+    CoapOpaqueOption(uint16_t number)
+        : ICoapOption(CoapOptionType::Opaque, number) {}
+    ~CoapOpaqueOption(){}
+
+    size_t GetSize() const { return Data.length(); }
+    void const * GetPtr() const { return Data.data(); }
+};
+
+class CoapStringOption : public ICoapOption
+{
+public:
+    std::string Data;
+    CoapStringOption(uint16_t number)
+        : ICoapOption(CoapOptionType::String, number) {}
+    ~CoapStringOption(){}
+
+    size_t GetSize() const { return Data.length(); }
+    void const * GetPtr() const { return Data.data(); }
+};
+
+class CoapUIntOption : public ICoapOption
+{
+public:
+    uint32_t Value;
+    CoapUIntOption(uint16_t number)
+        : ICoapOption(CoapOptionType::UInt, number) {}
+    ~CoapUIntOption(){}
+
+    size_t GetSize() const
+    {
+        if (this->Value > 0xFFFFFFu)
+            return 4;
+        else if (this->Value > 0xFFFFu)
+            return 3;
+        else if (this->Value > 0xFFu)
+            return 2;
+        else if (this->Value > 0u)
+            return 1;
+        else
+            return 0;
+    }
+    void const * GetPtr() const
+    {
+        // TODO: figure this endian shit out
+        return nullptr;
+    }
+};
 
 #endif /* __MAIN_COAP_ */

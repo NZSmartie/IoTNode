@@ -5,5 +5,6 @@
 
 PROJECT_NAME := IoTNode
 
-include $(IDF_PATH)/make/project.mk
+CXXFLAGS += -DLWIP_NETBUF_RECVINFO=1
 
+include $(IDF_PATH)/make/project.mk
