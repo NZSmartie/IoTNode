@@ -1,9 +1,7 @@
-[submodule "components/parson/parson"]
-	path = components/parson/parson
-	url = https://github.com/kgabis/parson
-[submodule "components/cn-cbor/cn-cbor"]
-	path = components/cn-cbor/cn-cbor
-	url = https://github.com/cabo/cn-cbor
 [submodule "components/lobaro-coap/lobaro-coap"]
 	path = components/lobaro-coap/lobaro-coap
 	url = https://github.com/lobaro/lobaro-coap
+[submodule "components/json/json"]
+	branch = master
+	path = components/json/json
+	url = https://github.com/nlohmann/json
