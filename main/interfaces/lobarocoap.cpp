@@ -46,21 +46,21 @@ CoAP_API_t _coap_api = {&hal_rtc_1Hz_Cnt, &hal_uart_puts};
 
 std::tuple<CoapOptionValue, CoapOptionType> const CoapOptiontypeMap[] =
 {
-    std::make_tuple(CoapOptionValue::IfMatch, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::UriHost, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::ETag, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::IfNoneMatch, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::UriPort, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::LocationPath, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::UriPath, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::ContentFormat, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::MaxAge, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::UriQuery, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::Accept, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::LocationQuery, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::ProxyUri, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::ProxyScheme, CoapOptionType::Empty),
-    std::make_tuple(CoapOptionValue::Size1, CoapOptionType::Empty),
+    std::make_tuple(CoapOptionValue::IfMatch,       CoapOptionType::Opaque),
+    std::make_tuple(CoapOptionValue::UriHost,       CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::ETag,          CoapOptionType::Opaque),
+    std::make_tuple(CoapOptionValue::IfNoneMatch,   CoapOptionType::Empty),
+    std::make_tuple(CoapOptionValue::UriPort,       CoapOptionType::UInt),
+    std::make_tuple(CoapOptionValue::LocationPath,  CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::UriPath,       CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::ContentFormat, CoapOptionType::UInt),
+    std::make_tuple(CoapOptionValue::MaxAge,        CoapOptionType::UInt),
+    std::make_tuple(CoapOptionValue::UriQuery,      CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::Accept,        CoapOptionType::UInt),
+    std::make_tuple(CoapOptionValue::LocationQuery, CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::ProxyUri,      CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::ProxyScheme,   CoapOptionType::String),
+    std::make_tuple(CoapOptionValue::Size1,         CoapOptionType::UInt),
 };
 
 std::vector<LobaroCoapResource*> LobaroCoapResource::_resources;
@@ -263,18 +263,14 @@ CoAP_HandlerResult_t LobaroCoapResource::ResourceHandler(CoAP_Message_t *request
 	       result == CoapResult::Postpone ? HANDLER_POSTPONE :
 	                                        HANDLER_ERROR;
 }
-CoapResource LobaroCoap::CreateResource(IApplicationResource * const applicationResource, const char* uri, CoapResult &result)
+void LobaroCoap::CreateResource(CoapResource &resource, IApplicationResource * const applicationResource, const char* uri, CoapResult &result)
 {
-    // TODO: Figure out subclassing?
-    CoapResource resource;
     new (resource.get()) LobaroCoapResource(applicationResource, uri, result);
 
     if (result != CoapResult::OK)
     {
-        // TODO: log error
+        ESP_LOGE(kTag, "LobaroCoap::CreateResource resource creation failed");
     }
-
-    return resource;
 }
 
 LobaroCoapResource::LobaroCoapResource(IApplicationResource * const applicationResource, const char* uri, CoapResult &result)
@@ -293,7 +289,7 @@ LobaroCoapResource::LobaroCoapResource(IApplicationResource * const applicationR
 
     if (this->_resource == nullptr)
     {
-        //ESP_LOGE( kTag, "CoAP_CreateResource returned null" );
+        ESP_LOGE(kTag, "CoAP_CreateResource returned null");
         result = CoapResult::Error;
         return;
     }
@@ -307,6 +303,13 @@ LobaroCoapResource::LobaroCoapResource(IApplicationResource * const applicationR
 
 void LobaroCoapResource::RegisterHandler(CoapMessageCode requestType, CoapResult &result)
 {
+    if(this->_resource == nullptr)
+    {
+        ESP_LOGE(kTag, "this->_resource is null");
+        result = CoapResult::Error;
+        return;
+    }
+
     switch(requestType)
     {
         case CoapMessageCode::Get:
@@ -380,16 +383,17 @@ void LobaroCoapResource::RegisterHandler(CoapMessageCode requestType, CoapResult
 //     return CoAP_GetUintFromOption( pOpt, value ) == COAP_OK ? kCoapOK : kCoapError;
 // }
 
-CoapOption LobaroCoapMessage::GetOption(const uint16_t number, CoapResult &result) const
+void LobaroCoapMessage::GetOption(CoapOption &option, const uint16_t number, CoapResult &result) const
 {
-    CoapOption option;
     CoapOptionType type = CoapOptionType::Empty;
+    uint32_t value = 0;
 
     CoAP_option_t *opt = CoAP_FindOptionByNumber( this->_message, number);
     if (opt == nullptr)
     {
+        ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: option (%u) not present in coap message", number);
         result = CoapResult::Error;
-        return option;
+        return;
     }
 
     for(auto it = std::begin(CoapOptiontypeMap); it != std::end(CoapOptiontypeMap); it++)
@@ -397,35 +401,45 @@ CoapOption LobaroCoapMessage::GetOption(const uint16_t number, CoapResult &resul
         if (std::get<0>(*it) == number)
         {
             type = std::get<1>(*it);
+            ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: known option type: %d", static_cast<int>(type));
             break;
         }
     }
+
     switch(type)
     {
         case CoapOptionType::Empty:
+            ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: initalising CoapEmptyOption");
             new (option.get()) CoapEmptyOption(number);
             result = CoapResult::OK;
             break;
         case CoapOptionType::Opaque:
+            ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: initalising CoapOpaqueOption");
             new (option.get()) CoapOpaqueOption(number);
-            static_cast<CoapOpaqueOption*>(option.get())->Data.assign(opt->Value, opt->Length);
+            option.get<CoapOpaqueOption>()->Data.assign(opt->Value, opt->Length);
             result = CoapResult::OK;
             break;
         case CoapOptionType::String:
+            ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: initalising CoapStringOption");
             new (option.get()) CoapStringOption(number);
-            static_cast<CoapStringOption*>(option.get())->Data.assign((char*)opt->Value, opt->Length);
+            option.get<CoapStringOption>()->Data.assign((char*)opt->Value, opt->Length);
             result = CoapResult::OK;
             break;
         case CoapOptionType::UInt:
+            ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: initalising CoapUIntOption");
             new (option.get()) CoapUIntOption(number);
-            CoAP_GetUintFromOption(opt, &static_cast<CoapUIntOption*>(option.get())->Value);
+            CoAP_GetUintFromOption(opt, &value);
+            ESP_LOGD(kTag, "CoAP_GetUintFromOption return %u", value);
+            option.get<CoapUIntOption>()->Value = value;
             result = CoapResult::OK;
             break;
         default:
+            ESP_LOGE(kTag, "LobaroCoapMessage::GetOption: Unknown type (%d)", static_cast<int>(type));
             // Error
             result = CoapResult::Error;
+            break;
     }
-    return option;
+    return;
 }
 
 // static CoapResult_t coap_option_get_next( CoapOption_t* option ){
@@ -470,10 +484,10 @@ void LobaroCoapMessage::AddOption(ICoapOption const *option, CoapResult &result)
     result = (res == COAP_OK) ? CoapResult::OK : CoapResult::Error;
 }
 
-CoapMessageCode LobaroCoapMessage::GetCode(CoapResult &result) const
+void LobaroCoapMessage::GetCode(CoapMessageCode &code, CoapResult &result) const
 {
     result = CoapResult::OK;
-    return static_cast<CoapMessageCode>(this->_message->Code);
+    code = static_cast<CoapMessageCode>(this->_message->Code);
 }
 
 void LobaroCoapMessage::SetCode(CoapMessageCode code, CoapResult &result)
@@ -488,16 +502,16 @@ void LobaroCoapMessage::SetCode(CoapMessageCode code, CoapResult &result)
 //     return kCoapOK;
 // }
 
-Payload LobaroCoapMessage::GetPayload(CoapResult &result) const
+void LobaroCoapMessage::GetPayload(Payload &payload, CoapResult &result) const
 {
     if (this->_message->Payload == nullptr)
     {
         result = CoapResult::Error;
-        return Payload();
+        return;
     }
 
     result = CoapResult::OK;
-    return Payload(this->_message->Payload, this->_message->PayloadLength);
+    new (&payload) Payload(this->_message->Payload, this->_message->PayloadLength);
 }
 
 void LobaroCoapMessage::SetPayload(const Payload &payload, CoapResult &result)

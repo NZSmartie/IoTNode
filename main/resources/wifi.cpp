@@ -11,7 +11,7 @@ using json = nlohmann::json;
 
 #include "wifi.h"
 
-static const char *TAG = "CoAP Resource";
+static const char *kTag = "Wifi Resource";
 
 void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *response, CoapResult &result)
 {
@@ -19,14 +19,17 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
 	// char payloadTemp[250], ip_address[16], ip_mask[16], ip_gateway[16];
 	// char* pStrWorking = payloadTemp;
 
-    auto acceptOption = request->GetOption(CoapOptionValue::Accept, result);
+    CoapOption acceptOption;
+    request->GetOption(acceptOption, CoapOptionValue::Accept, result);
     uint32_t accept = result == CoapResult::OK
-        ? (CoapContentType)AsUInt(acceptOption)->Value
+        ? static_cast<CoapContentType>(AsUInt(acceptOption)->Value)
         : CoapContentType::TextPlain;
+
+    ESP_LOGW(kTag, "request->GetOption result: %d. ContentType: %d", static_cast<int>(result), accept);
 
 	// if( tcpip_adapter_get_ip_info( TCPIP_ADAPTER_IF_STA, &ipinfo ) != ESP_OK )
     // {
-    //     ESP_LOGE( TAG, "tcpip_adapter_get_ip_info: failed" );
+    //     ESP_LOGE( kTag, "tcpip_adapter_get_ip_info: failed" );
     //     return HANDLER_ERROR;
     // }
 
@@ -34,6 +37,8 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
     {
         std::ostringstream output;
         output << "Ohai :3"; //"IP: "  << IP2STR( &ipinfo.ip )  << ", Mask: " << IP2STR( &ipinfo.netmask ) << ", Gateway: " << IP2STR( &ipinfo.gw );
+
+        response->AddOption(CoapUIntOption(CoapOptionValue::ContentFormat, CoapContentType::TextPlain), result);
         response->SetPayload(output.str(), result);
         response->SetCode(CoapMessageCode::Content, result);
     }
@@ -55,6 +60,8 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
     //     json_value_free(root_value);
 
     //     CoAP_AddCfOptionToMsg( pResp, COAP_CF_JSON );
+
+        response->AddOption(CoapUIntOption(CoapOptionValue::ContentFormat, CoapContentType::ApplicationJson), result);
         response->SetPayload(output.dump(), result);
         response->SetCode(CoapMessageCode::Content, result);
     }
@@ -96,6 +103,7 @@ void WifiResource::HandleRequest(ICoapMessage const *request, ICoapMessage *resp
     //     CoAP_AddCfOptionToMsg( pResp, COAP_CF_CBOR );
     //     CoAP_SetPayload( pResp, (uint8_t*) payloadTemp, enc_sz, true );
     //     return HANDLER_OK;
+        response->AddOption(CoapUIntOption(CoapOptionValue::ContentFormat, CoapContentType::ApplicationCbor), result);
         response->SetPayload(json::to_cbor(output), result);
         response->SetCode(CoapMessageCode::Content, result);
     }
@@ -112,10 +120,10 @@ WifiResource::WifiResource(ICoapInterface& coap)
     : _coap(coap)
 {
     CoapResult result;
-    this->_resource = this->_coap.CreateResource(this, "wifi", result);
-    if (result != CoapResult::OK)
+    this->_coap.CreateResource(this->_resource, this, "wifi", result);
+    if (result != CoapResult::OK || this->_resource == nullptr)
     {
-        ESP_LOGE( TAG, "CoAP_CreateResource returned NULL" );
+        ESP_LOGE( kTag, "CoAP_CreateResource returned NULL" );
         return;
     }
 

@@ -112,10 +112,9 @@ public:
         return (TInterface const *)_allocation;
     }
 
-    TInterface *get()
-    {
-        return (TInterface *)_allocation;
-    }
+    TInterface *get() { return (TInterface *)_allocation; }
+    template<class T>
+    T *get() { return (T *)_allocation; }
 
     operator TInterface*() { return (TInterface *)_allocation; }
     operator TInterface const *() const { return (TInterface const *)_allocation; }
@@ -165,7 +164,7 @@ public:
     // CoapResult option_get_uint( const CoapOption_t option, uint32_t* value );
 
     virtual void Start(CoapResult &result) = 0;
-    virtual CoapResource CreateResource(IApplicationResource * const applicationResource, const char* uri , CoapResult &result) = 0;
+    virtual void CreateResource(CoapResource &resource, IApplicationResource * const applicationResource, const char* uri, CoapResult &result) = 0;
 
     virtual void SetNetworkReady(bool ready) = 0;
 };
@@ -176,11 +175,12 @@ public:
     virtual ~ICoapMessage(){}
     // virtual void GetOption_uint(const uint16_t option, uint32_t *value, CoapResult &result);
     // virtual void AddOption_uint(uint16_t option, uint32_t code, CoapResult &result);
-    virtual CoapOption GetOption(const uint16_t number, CoapResult &result) const = 0;
+    virtual void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const = 0;
     virtual void AddOption(ICoapOption const *option, CoapResult &result) = 0;
-    virtual CoapMessageCode GetCode(CoapResult &result) const = 0;
+    virtual void AddOption(ICoapOption const &option, CoapResult &result) { this->AddOption(&option, result); }
+    virtual void GetCode(CoapMessageCode &code, CoapResult &result) const = 0;
     virtual void SetCode(CoapMessageCode code, CoapResult &result) = 0;
-    virtual Payload GetPayload(CoapResult &result) const = 0;
+    virtual void GetPayload(Payload &payload, CoapResult &result) const = 0;
     virtual void SetPayload(Payload const &payload, CoapResult &result) = 0;
 
     template<class T>
@@ -237,6 +237,8 @@ public:
     Payload Data;
     CoapOpaqueOption(uint16_t number)
         : ICoapOption(CoapOptionType::Opaque, number) {}
+    CoapOpaqueOption(uint16_t number, const Payload &payload)
+        : ICoapOption(CoapOptionType::Opaque, number), Data(payload) {}
     ~CoapOpaqueOption(){}
 
     size_t GetSize() const { return Data.length(); }
@@ -249,6 +251,8 @@ public:
     std::string Data;
     CoapStringOption(uint16_t number)
         : ICoapOption(CoapOptionType::String, number) {}
+    CoapStringOption(uint16_t number, const std::string &data)
+        : ICoapOption(CoapOptionType::String, number), Data(data) {}
     ~CoapStringOption(){}
 
     size_t GetSize() const { return Data.length(); }
@@ -261,6 +265,8 @@ public:
     uint32_t Value;
     CoapUIntOption(uint16_t number)
         : ICoapOption(CoapOptionType::UInt, number) {}
+    CoapUIntOption(uint16_t number, uint32_t value)
+        : ICoapOption(CoapOptionType::UInt, number), Value(value) {}
     ~CoapUIntOption(){}
 
     size_t GetSize() const

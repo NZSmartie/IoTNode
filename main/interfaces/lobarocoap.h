@@ -27,7 +27,7 @@ public:
     void Start(CoapResult &result);
     virtual ~LobaroCoap(){}
 
-    CoapResource CreateResource(IApplicationResource * const applicationResource, const char* uri, CoapResult &result);
+    void CreateResource(CoapResource &resource, IApplicationResource * const applicationResource, const char* uri, CoapResult &result);
     void SetNetworkReady(bool ready);
 };
 
@@ -59,13 +59,13 @@ public:
     LobaroCoapMessage(CoAP_Message_t *message)
         : _message(message) {}
 
-    CoapOption GetOption(const uint16_t number, CoapResult &result) const;
+    void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const;
     void AddOption(ICoapOption const *option, CoapResult &result);
 
-    CoapMessageCode GetCode(CoapResult &result) const;
+    void GetCode(CoapMessageCode &code, CoapResult &result) const;
     void SetCode(CoapMessageCode code, CoapResult &result);
 
-    Payload GetPayload(CoapResult &result) const;
+    void GetPayload(Payload &payload, CoapResult &result) const;
     void SetPayload(const Payload &payload, CoapResult &result);
 };
 
