@@ -17,15 +17,18 @@ private:
     static void TaskHandle(void* pvParameters);
     CoAP_Socket_t *_context;
     struct netconn *_socket;
+    bool _networkReady;
     static bool SendDatagram(SocketHandle_t socketHandle, NetPacket_t* packet);
 
     bool SendDatagram(NetPacket_t* packet);
     void ReadDatagram();
 public:
-    LobaroCoap(CoapResult &result);
+    LobaroCoap();
+    void Start(CoapResult &result);
     virtual ~LobaroCoap(){}
 
     CoapResource CreateResource(IApplicationResource * const applicationResource, const char* uri, CoapResult &result);
+    void SetNetworkReady(bool ready);
 };
 
 class LobaroCoapResource : public ICoapResource

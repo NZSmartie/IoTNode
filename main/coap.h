@@ -6,6 +6,7 @@
 #include <cstring>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -20,7 +21,7 @@ enum class CoapResult
 // TODO: Adjust these max sizes
 enum CoapConstraints : unsigned long long
 {
-    MaxResourceSize = 10,
+    MaxResourceSize = 50,
     MaxMessageSize = 10,
     MaxOptionSize = 10,
 };
@@ -140,9 +141,6 @@ struct CoapOptions
 typedef void* CoapOption_t;
 typedef void* CoapMessage_t;
 
-extern const int kCoapConnectedBit;
-// typedef CoapResult (*CoapResourceCallback_t)( const CoapResource_t, const CoapMessage_t, CoapMessage_t );
-
 class ICoapResource;
 class ICoapMessage;
 class ICoapOption;
@@ -166,7 +164,10 @@ public:
     // CoapResult option_get_next( CoapOption_t* option );
     // CoapResult option_get_uint( const CoapOption_t option, uint32_t* value );
 
+    virtual void Start(CoapResult &result) = 0;
     virtual CoapResource CreateResource(IApplicationResource * const applicationResource, const char* uri , CoapResult &result) = 0;
+
+    virtual void SetNetworkReady(bool ready) = 0;
 };
 
 class ICoapMessage
@@ -182,6 +183,8 @@ public:
     virtual Payload GetPayload(CoapResult &result) const = 0;
     virtual void SetPayload(Payload const &payload, CoapResult &result) = 0;
 
+    template<class T>
+    void SetPayload(std::vector<T> const &something, CoapResult &result) { this->SetPayload(Payload(something.begin(), something.end()), result); }
     template<class T>
     void SetPayload(T const &something, CoapResult &result) { this->SetPayload(Payload((const uint8_t *)something.data(), something.length()), result); }
 };

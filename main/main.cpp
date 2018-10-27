@@ -21,12 +21,16 @@ static const char* TAG = "IoTNode";
 static bool connected = false;
 static EventGroupHandle_t wifi_event_group;
 
+static const int kCoapConnectedBit = ( 1 << 0 );
+
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
 
 #if !defined( WIFI_SSID ) || !defined( WIFI_PASSWORD )
     #error WIFI_SSID or WIFI_PASSWORD not set in secrets file. See secrets.example
 #endif
+
+LobaroCoap coap_interface;
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -43,10 +47,12 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
             break;
         case SYSTEM_EVENT_STA_GOT_IP:
             xEventGroupSetBits( wifi_event_group, kCoapConnectedBit );
+            coap_interface.SetNetworkReady(true);
             break;
         case SYSTEM_EVENT_STA_DISCONNECTED:
             xEventGroupClearBits( wifi_event_group, kCoapConnectedBit );
             connected = false;
+            coap_interface.SetNetworkReady(false);
             break;
         default:
             break;
@@ -63,7 +69,7 @@ void app_main(void)
     tcpip_adapter_init();
 
     CoapResult result;
-    LobaroCoap coap_interface(result);
+    coap_interface.Start(result);
     assert(result == CoapResult::OK);
 
     // Create and register our wifi resource

@@ -6,6 +6,7 @@
 #include "freertos/timers.h"
 
 #include "lwip/api.h"
+#include "lwip/netif.h"
 
 extern "C" {
     #include "liblobaro_coap.h"
@@ -36,8 +37,6 @@ static const int kCoapDefaultTimeSec = 5;
 static const int kCoapThreadStackSize = 10240;
 static const int kCoapThreadPriority = 8;
 
-const int kCoapConnectedBit = ( 1 << 0 );
-
 static uint8_t _coap_memory[kCoapMemorySize];
 static CoAP_Config_t _coap_config = {_coap_memory, kCoapMemorySize};
 
@@ -66,10 +65,13 @@ std::tuple<CoapOptionValue, CoapOptionType> const CoapOptiontypeMap[] =
 
 std::vector<LobaroCoapResource*> LobaroCoapResource::_resources;
 
-LobaroCoap::LobaroCoap(CoapResult &result)
+LobaroCoap::LobaroCoap()
 {
     CoAP_Init(_coap_api, _coap_config);
+}
 
+void LobaroCoap::Start(CoapResult &result)
+{
     int ret = xTaskCreate(
         &LobaroCoap::TaskHandle,
         kCoapThreadName,
@@ -83,6 +85,12 @@ LobaroCoap::LobaroCoap(CoapResult &result)
 
     if (ret != true)
         ESP_LOGE( kTag, "Failed to create thread %s", kCoapThreadName );
+}
+
+void LobaroCoap::SetNetworkReady(bool ready)
+{
+    // TODO: Do we notify our task?
+    this->_networkReady = ready;
 }
 
 bool LobaroCoap::SendDatagram(NetPacket_t *packet)
@@ -501,59 +509,69 @@ void LobaroCoapMessage::SetPayload(const Payload &payload, CoapResult &result)
 void LobaroCoap::TaskHandle(void *pvParameters)
 {
     auto instance = static_cast<LobaroCoap *>(pvParameters);
-    instance->_socket = netconn_new(NETCONN_UDP);
 
-    if (instance->_socket == nullptr)
+    while(true)
     {
-        ESP_LOGE( kTag, "netconn_new(): Failed to get new socket" );
-        vTaskDelete(nullptr);
-        return;
+        if(!instance->_networkReady)
+        {
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        instance->_socket = netconn_new(NETCONN_UDP);
+
+
+        if (instance->_socket == nullptr)
+        {
+            ESP_LOGE( kTag, "netconn_new(): Failed to get new socket" );
+            vTaskDelete(nullptr);
+            return;
+        }
+
+        // Allocate a socket in Lobaro CoAP's memory and return the address
+        if ((instance->_context = CoAP_NewSocket(instance)) == nullptr)
+        {
+            ESP_LOGE(kTag, "CoAP_NewSocket(): failed socket allocation");
+            netconn_delete(instance->_socket);
+            vTaskDelete(nullptr);
+            return;
+        }
+
+        if (netconn_bind(instance->_socket, nullptr, kCoapPort) != ERR_OK)
+        {
+            ESP_LOGE(kTag, "netconn_bind( ... ): Failed");
+            netconn_delete(instance->_socket);
+            vTaskDelete(nullptr);
+            return;
+        }
+
+        ip_addr_t multicast_addr;
+        IP4_ADDR( ip_2_ip4(&multicast_addr) , 224, 0, 1, 187 );
+        if (netconn_join_leave_group(instance->_socket, &multicast_addr, nullptr, NETCONN_JOIN ) != ERR_OK)
+            ESP_LOGE( kTag, "netconn_join_leave_group( ... ): Failed" );
+
+        ESP_LOGI( kTag, "Coap library now listening" );
+
+        //user callback registration
+        instance->_context->Tx = &LobaroCoap::SendDatagram;
+        instance->_context->Alive = true;
+
+        ESP_LOGD( kTag, "Listening: Port: %hu", kCoapPort);
+
+        while(instance->_networkReady) {
+            // TODO: Loop through all interfaces, and perform interface specific polling stuff
+            // For now, work with UDP sockets and call Lobaro-coap stuff
+
+            if (instance->_context == nullptr)
+                break;
+
+            netconn_set_recvtimeout(instance->_socket, 10);
+
+            instance->ReadDatagram();
+
+            CoAP_doWork();
+        }
     }
-
-    // Allocate a socket in Lobaro CoAP's memory and return the address
-    if ((instance->_context = CoAP_NewSocket(instance)) == nullptr)
-    {
-        ESP_LOGE(kTag, "CoAP_NewSocket(): failed socket allocation");
-        netconn_delete(instance->_socket);
-        vTaskDelete(nullptr);
-        return;
-    }
-
-    if (netconn_bind(instance->_socket, nullptr, kCoapPort) != ERR_OK)
-    {
-        ESP_LOGE(kTag, "netconn_bind( ... ): Failed");
-        netconn_delete(instance->_socket);
-        vTaskDelete(nullptr);
-        return;
-    }
-
-    ip_addr_t multicast_addr;
-    IP4_ADDR( ip_2_ip4(&multicast_addr) , 224, 0, 1, 187 );
-    if (netconn_join_leave_group(instance->_socket, &multicast_addr, nullptr, NETCONN_JOIN ) != ERR_OK)
-        ESP_LOGE( kTag, "netconn_join_leave_group( ... ): Failed" );
-
-    ESP_LOGI( kTag, "Coap library now listening" );
-
-    //user callback registration
-    instance->_context->Tx = &LobaroCoap::SendDatagram;
-    instance->_context->Alive = true;
-
-    ESP_LOGD( kTag, "Listening: Port: %hu", kCoapPort);
-
-    for(;;) {
-        // TODO: Loop through all interfaces, and perform interface specific polling stuff
-        // For now, work with UDP sockets and call Lobaro-coap stuff
-
-        if (instance->_context == nullptr)
-            break;
-
-        netconn_set_recvtimeout(instance->_socket, 10);
-
-        instance->ReadDatagram();
-
-        CoAP_doWork();
-    }
-
     vTaskDelete(nullptr);
 }
 
