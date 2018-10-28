@@ -187,6 +187,7 @@ public:
     void SetPayload(std::vector<T> const &something, CoapResult &result) { this->SetPayload(Payload(something.begin(), something.end()), result); }
     template<class T>
     void SetPayload(T const &something, CoapResult &result) { this->SetPayload(Payload((const uint8_t *)something.data(), something.length()), result); }
+    void SetPayload(const char *something, CoapResult &result) { this->SetPayload(Payload((const uint8_t *)something), result); }
 };
 
 class ICoapResource
