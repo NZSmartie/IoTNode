@@ -1,7 +1,7 @@
 #ifndef _RESOURCES_WIFI_H_
 #define _RESOURCES_WIFI_H_
 
-#include "../coap.h"
+#include "coap.h"
 
 class WifiResource : public IApplicationResource {
     ICoapInterface& _coap;

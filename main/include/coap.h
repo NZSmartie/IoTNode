@@ -178,7 +178,7 @@ public:
     virtual void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const = 0;
     virtual void AddOption(ICoapOption const *option, CoapResult &result) = 0;
     virtual void AddOption(ICoapOption const &option, CoapResult &result) { this->AddOption(&option, result); }
-    virtual void GetCode(CoapMessageCode &code, CoapResult &result) const = 0;
+    virtual CoapMessageCode GetCode() const = 0;
     virtual void SetCode(CoapMessageCode code, CoapResult &result) = 0;
     virtual void GetPayload(Payload &payload, CoapResult &result) const = 0;
     virtual void SetPayload(Payload const &payload, CoapResult &result) = 0;

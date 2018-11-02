@@ -11,8 +11,8 @@ using json = nlohmann::json;
 #include "esp_log.h"
 #include "tcpip_adapter.h"
 
-#include "../utils.h"
-#include "wifi.h"
+#include "utils.h"
+#include "resources/wifi.h"
 
 static const char *kTag = "Wifi Resource";
 

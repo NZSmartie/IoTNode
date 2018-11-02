@@ -15,6 +15,7 @@
 #include "esp_log.h"
 
 #include "interfaces/lobarocoap.h"
+#include "resources/led.h"
 #include "resources/wifi.h"
 
 static const char* TAG = "IoTNode";
@@ -22,6 +23,9 @@ static bool connected = false;
 static EventGroupHandle_t wifi_event_group;
 
 static const int kCoapConnectedBit = ( 1 << 0 );
+static const gpio_num_t kLEDRed = GPIO_NUM_26;
+static const gpio_num_t kLEDGreen = GPIO_NUM_33;
+static const gpio_num_t kLEDBlue = GPIO_NUM_32;
 
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
@@ -75,6 +79,9 @@ void app_main(void)
     // Create and register our wifi resource
     WifiResource wifiResource(coap_interface);
 
+    // Create and register our LED resource
+    LEDResource statusLED(coap_interface, kLEDRed, kLEDGreen, kLEDBlue);
+
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -92,15 +99,20 @@ void app_main(void)
     ESP_ERROR_CHECK( esp_wifi_start() );
     ESP_ERROR_CHECK( esp_wifi_connect() );
 
-    gpio_set_direction(GPIO_NUM_4, GPIO_MODE_OUTPUT);
     int level = 0;
     while (true) {
-        gpio_set_level(GPIO_NUM_4, level);
-        level = !level;
+        level = level ? 0 : 1;
 
-        if ( connected )
+        if (connected)
+        {
+            statusLED.SetStatusColor(0, level * 30, 0, 100);
             vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
         else
+        {
+            statusLED.SetMode(LEDResource::Mode::ShowStatus); // force the led to show the status instead of use configured colour
+            statusLED.SetStatusColor(level * 50, 0, 0, 100);
             vTaskDelay(250 / portTICK_PERIOD_MS);
+        }
     }
 }

@@ -484,10 +484,9 @@ void LobaroCoapMessage::AddOption(ICoapOption const *option, CoapResult &result)
     result = (res == COAP_OK) ? CoapResult::OK : CoapResult::Error;
 }
 
-void LobaroCoapMessage::GetCode(CoapMessageCode &code, CoapResult &result) const
+CoapMessageCode LobaroCoapMessage::GetCode() const
 {
-    result = CoapResult::OK;
-    code = static_cast<CoapMessageCode>(this->_message->Code);
+    return static_cast<CoapMessageCode>(this->_message->Code);
 }
 
 void LobaroCoapMessage::SetCode(CoapMessageCode code, CoapResult &result)

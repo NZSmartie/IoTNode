@@ -2,7 +2,7 @@
 #define _INTERFACES_LOBAROCOAP_H_
 
 #include <vector>
-#include "../coap.h"
+#include "coap.h"
 
 extern "C" {
     #include "liblobaro_coap.h"
@@ -62,7 +62,7 @@ public:
     void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const;
     void AddOption(ICoapOption const *option, CoapResult &result);
 
-    void GetCode(CoapMessageCode &code, CoapResult &result) const;
+    CoapMessageCode GetCode() const;
     void SetCode(CoapMessageCode code, CoapResult &result);
 
     void GetPayload(Payload &payload, CoapResult &result) const;

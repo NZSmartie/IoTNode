@@ -9,6 +9,7 @@
 
 # Add additional subfolders to the build bath
 COMPONENT_SRCDIRS += interfaces resources
+COMPONENT_ADD_INCLUDEDIRS := include
 
 SHELL := /bin/bash
 SECRETS := ${PROJECT_PATH}/secrets
