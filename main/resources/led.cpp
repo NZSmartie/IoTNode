@@ -23,12 +23,16 @@ static const ledc_channel_t kLedcCh0Channel = LEDC_CHANNEL_0;
 static const ledc_channel_t kLedcCh1Channel = LEDC_CHANNEL_1;
 static const ledc_channel_t kLedcCh2Channel = LEDC_CHANNEL_2;
 
-static const int kFadeTime = 100;
+static const ledc_timer_bit_t kLedcResolution = LEDC_TIMER_10_BIT;
+static constexpr int kLedcHPoint = (1 << kLedcResolution) - 1;
+
+static const int kFadeTime = 200;
 
 void LEDResource::HandleRequest(ICoapMessage const *request, ICoapMessage *response, CoapResult &result)
 {
     CoapOption acceptOption;
     request->GetOption(acceptOption, CoapOptionValue::Accept, result);
+    uint8_t red, green, blue;
 
     // Default to text/plain if the option wasn't present
     uint32_t accept = result == CoapResult::OK
@@ -58,9 +62,9 @@ void LEDResource::HandleRequest(ICoapMessage const *request, ICoapMessage *respo
             auto mode = input.find("mode");
             if(color != input.end() && (*color).is_array() && (*color).size() == 3)
             {
-                auto red = (*color)[0].get<uint8_t>();
-                auto green = (*color)[1].get<uint8_t>();
-                auto blue = (*color)[2].get<uint8_t>();
+                red = (*color)[0].get<uint8_t>();
+                green = (*color)[1].get<uint8_t>();
+                blue = (*color)[2].get<uint8_t>();
                 SetColor(red, green, blue);
             }
             if(mode != input.end() && (*mode).is_string())
@@ -76,7 +80,8 @@ void LEDResource::HandleRequest(ICoapMessage const *request, ICoapMessage *respo
     }
 
     json output;
-    output["color"] = { _redValue, _greenValue, _blueValue };
+    GetColor(red, green, blue);
+    output["color"] = { red, green, blue };
     output["mode"] = _mode == Mode::ShowStatus ? "status" : "user";
 
     if(accept == CoapContentType::ApplicationJson)
@@ -117,7 +122,7 @@ LEDResource::LEDResource(ICoapInterface& coap, gpio_num_t red, gpio_num_t green,
      * that will be used by LED Controller
      */
     ledc_timer_config_t ledc_timer;
-        ledc_timer.duty_resolution = LEDC_TIMER_8_BIT; // resolution of PWM duty
+        ledc_timer.duty_resolution = kLedcResolution; // resolution of PWM duty
         ledc_timer.freq_hz = 5000;                      // frequency of PWM signal
         ledc_timer.speed_mode = LEDC_HIGH_SPEED_MODE;           // timer mode
         ledc_timer.timer_num = LEDC_TIMER_0;           // timer index
@@ -131,21 +136,21 @@ LEDResource::LEDResource(ICoapInterface& coap, gpio_num_t red, gpio_num_t green,
     _ledcRedChannel.gpio_num   = _pinLEDRed;
     _ledcRedChannel.speed_mode = kLedcMode;
     _ledcRedChannel.timer_sel  = LEDC_TIMER_0;
-    _ledcRedChannel.hpoint     = 255;
+    _ledcRedChannel.hpoint     = kLedcHPoint;
 
     _ledcGreenChannel.channel    = kLedcCh1Channel;
     _ledcGreenChannel.duty       = 0;
     _ledcGreenChannel.gpio_num   = _pinLEDGreen;
     _ledcGreenChannel.speed_mode = kLedcMode;
     _ledcGreenChannel.timer_sel  = LEDC_TIMER_0;
-    _ledcGreenChannel.hpoint     = 255;
+    _ledcGreenChannel.hpoint     = kLedcHPoint;
 
     _ledcBlueChannel.channel    = kLedcCh2Channel;
     _ledcBlueChannel.duty       = 0;
     _ledcBlueChannel.gpio_num   = _pinLEDBlue;
     _ledcBlueChannel.speed_mode = kLedcMode;
     _ledcBlueChannel.timer_sel  = LEDC_TIMER_0;
-    _ledcBlueChannel.hpoint     = 255;
+    _ledcBlueChannel.hpoint     = kLedcHPoint;
 
 
     // Set LED Controller with previously prepared configuration
@@ -163,9 +168,9 @@ void LEDResource::SetStatusColor(uint8_t red, uint8_t green, uint8_t blue, int f
     if(_mode != Mode::ShowStatus)
         return;
 
-    ledc_set_fade_time_and_start(_ledcRedChannel.speed_mode, _ledcRedChannel.channel, red, fadeTime, LEDC_FADE_NO_WAIT);
-    ledc_set_fade_time_and_start(_ledcGreenChannel.speed_mode, _ledcGreenChannel.channel, green, fadeTime, LEDC_FADE_NO_WAIT);
-    ledc_set_fade_time_and_start(_ledcBlueChannel.speed_mode, _ledcBlueChannel.channel, blue, fadeTime, LEDC_FADE_NO_WAIT);
+    ledc_set_fade_time_and_start(_ledcRedChannel.speed_mode, _ledcRedChannel.channel, red << 2, fadeTime, LEDC_FADE_NO_WAIT);
+    ledc_set_fade_time_and_start(_ledcGreenChannel.speed_mode, _ledcGreenChannel.channel, green << 2, fadeTime, LEDC_FADE_NO_WAIT);
+    ledc_set_fade_time_and_start(_ledcBlueChannel.speed_mode, _ledcBlueChannel.channel, blue << 2, fadeTime, LEDC_FADE_NO_WAIT);
 }
 
 void LEDResource::SetMode(Mode mode)
@@ -191,11 +196,11 @@ void LEDResource::SetMode(Mode mode)
 
 void LEDResource::SetColor(uint8_t red, uint8_t green, uint8_t blue)
 {
-    _redValue = red;
-    _greenValue = green;
-    _blueValue = blue;
+    _redValue = red << 2;
+    _greenValue = green << 2;
+    _blueValue = blue << 2;
 
-    if(_mode != Mode::ShowStatus)
+    if(_mode != Mode::User)
         return;
 
     ledc_set_fade_time_and_start(_ledcRedChannel.speed_mode, _ledcRedChannel.channel, _redValue, kFadeTime, LEDC_FADE_NO_WAIT);
@@ -205,7 +210,7 @@ void LEDResource::SetColor(uint8_t red, uint8_t green, uint8_t blue)
 
 void LEDResource::GetColor(uint8_t &red, uint8_t &green, uint8_t &blue)
 {
-    red = _redValue;
-    green = _greenValue;
-    blue = _blueValue;
+    red = _redValue >> 2;
+    green = _greenValue >> 2;
+    blue = _blueValue >> 2;
 }

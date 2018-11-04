@@ -1,6 +1,7 @@
 #ifndef _RESOURCES_LED_H_
 #define _RESOURCES_LED_H_
 
+#include "driver/gpio.h"
 #include "driver/ledc.h"
 
 #include "coap.h"
@@ -20,9 +21,9 @@ private:
     const gpio_num_t _pinLEDGreen;
     const gpio_num_t _pinLEDBlue;
 
-    uint8_t _redValue = 0;
-    uint8_t _greenValue = 0;
-    uint8_t _blueValue = 0;
+    uint32_t _redValue = 0;
+    uint32_t _greenValue = 0;
+    uint32_t _blueValue = 0;
 
     Mode _mode = Mode::ShowStatus;
 
