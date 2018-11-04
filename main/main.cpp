@@ -132,17 +132,28 @@ static void TaskHandle(void* pvParameters)
     SwitchResource pushSwitch(coap_interface, kSwitchPin);
 
     int level = 0;
+    bool lastConnectedState = false;
     while (true)
     {
-        level = level ? 0 : 1;
 
         if (connected)
         {
-            statusLED.SetStatusColor(0, level * 15, 0, 250);
+            if(lastConnectedState != connected)
+            {
+                lastConnectedState = connected;
+                statusLED.SetStatusColor(0, 15, 0, 250);
+            }
+            else
+            {
+                statusLED.SetMode(LEDResource::Mode::User);
+            }
+
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
         else
         {
+            level = level ? 0 : 1;
+
             statusLED.SetMode(LEDResource::Mode::ShowStatus); // force the led to show the status instead of use configured colour
             statusLED.SetStatusColor(level * 30, 0, 0, 100);
             vTaskDelay(250 / portTICK_PERIOD_MS);
