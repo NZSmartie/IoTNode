@@ -106,8 +106,9 @@ bool LobaroCoap::SendDatagram(NetPacket_t *packet)
 
     struct netbuf *buffer = netbuf_new();
 
-    for(;;)
+    do
     {
+        ESP_LOGD(kTag, "LobaroCoap::SendDatagram: Attempting to send %d bytes", packet->size);
         if( netbuf_ref( buffer, packet->pData, packet->size ) != ERR_OK)
         {
             ESP_LOGE( kTag, "netbuf_ref( ... ): failed");
@@ -128,13 +129,15 @@ bool LobaroCoap::SendDatagram(NetPacket_t *packet)
 
         ip_2_ip4(&client_address)->addr = packet->remoteEp.NetAddr.IPv4.u32[0];
 
-        if (netconn_sendto(this->_socket, buffer, &client_address, packet->remoteEp.NetPort) != ERR_OK)
+        err_t send_result = netconn_sendto(this->_socket, buffer, &client_address, packet->remoteEp.NetPort);
+        if (send_result != ERR_OK)
         {
-            ESP_LOGE(kTag, "send_datagram returned %d; Internal Socket Error", errno);
+            ESP_LOGE(kTag, "netconn_sendto returned %d; Internal Socket Error", send_result);
             break;
         }
         success = true;
     }
+    while(0); // Run once loop.
 
     netbuf_delete(buffer);
     return success;
