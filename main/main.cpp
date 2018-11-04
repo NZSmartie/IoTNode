@@ -16,16 +16,23 @@
 
 #include "interfaces/lobarocoap.h"
 #include "resources/led.h"
+#include "resources/switch.h"
 #include "resources/wifi.h"
 
-static const char* TAG = "IoTNode";
+static const char* kTag = "IoTNode";
 static bool connected = false;
 static EventGroupHandle_t wifi_event_group;
 
 static const int kCoapConnectedBit = ( 1 << 0 );
-static const gpio_num_t kLEDRed = GPIO_NUM_26;
-static const gpio_num_t kLEDGreen = GPIO_NUM_33;
-static const gpio_num_t kLEDBlue = GPIO_NUM_32;
+static const gpio_num_t kLEDRedPin = GPIO_NUM_26;
+static const gpio_num_t kLEDGreenPin = GPIO_NUM_33;
+static const gpio_num_t kLEDBluePin = GPIO_NUM_32;
+
+static const gpio_num_t kSwitchPin = GPIO_NUM_12;
+
+static const char *kThreadName = "Main Task";
+static const size_t kThreadStackSize = 4098;
+static const UBaseType_t kThreadPriority = 8;
 
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
@@ -44,7 +51,7 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
         case SYSTEM_EVENT_STA_START:
             // Change the default hostname (can only be done when interface has started)
             if ( (ret = tcpip_adapter_set_hostname( TCPIP_ADAPTER_IF_STA, CONFIG_IOTNODE_HOSTNAME ) ) != ESP_OK )
-                ESP_LOGE( TAG, "tcpip_adapter_set_hostname failed to set Hostname to \"" CONFIG_IOTNODE_HOSTNAME "\" with %d (0x%X)", ret, ret );
+                ESP_LOGE( kTag, "tcpip_adapter_set_hostname failed to set Hostname to \"" CONFIG_IOTNODE_HOSTNAME "\" with %d (0x%X)", ret, ret );
             break;
         case SYSTEM_EVENT_STA_CONNECTED:
             connected = true;
@@ -64,6 +71,8 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
     return ESP_OK;
 }
 
+static void TaskHandle(void* pvParameters);
+
 extern "C"
 void app_main(void)
 {
@@ -71,16 +80,6 @@ void app_main(void)
 
     nvs_flash_init();
     tcpip_adapter_init();
-
-    CoapResult result;
-    coap_interface.Start(result);
-    assert(result == CoapResult::OK);
-
-    // Create and register our wifi resource
-    WifiResource wifiResource(coap_interface);
-
-    // Create and register our LED resource
-    LEDResource statusLED(coap_interface, kLEDRed, kLEDGreen, kLEDBlue);
 
     ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
 
@@ -99,19 +98,53 @@ void app_main(void)
     ESP_ERROR_CHECK( esp_wifi_start() );
     ESP_ERROR_CHECK( esp_wifi_connect() );
 
+    // Start a new Application task with enough  stack size to hold the resources
+    xTaskHandle _task;
+    int ret = xTaskCreate(
+        &TaskHandle,
+        kThreadName,
+        kThreadStackSize,
+        nullptr,
+        kThreadPriority,
+        &_task
+    );
+
+    if (ret != true)
+        ESP_LOGE(kTag, "Failed to create thread %s", kThreadName );
+
+    while (true)
+    {
+        vTaskSuspend(nullptr);
+    }
+}
+
+static void TaskHandle(void* pvParameters)
+{
+    CoapResult result;
+    coap_interface.Start(result);
+    assert(result == CoapResult::OK);
+
+    // Create and register our wifi resource
+    WifiResource wifiResource(coap_interface);
+
+    // Create and register our LED resource
+    LEDResource statusLED(coap_interface, kLEDRedPin, kLEDGreenPin, kLEDBluePin);
+    SwitchResource pushSwitch(coap_interface, kSwitchPin);
+
     int level = 0;
-    while (true) {
+    while (true)
+    {
         level = level ? 0 : 1;
 
         if (connected)
         {
-            statusLED.SetStatusColor(0, level * 30, 0, 100);
+            statusLED.SetStatusColor(0, level * 15, 0, 250);
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
         else
         {
             statusLED.SetMode(LEDResource::Mode::ShowStatus); // force the led to show the status instead of use configured colour
-            statusLED.SetStatusColor(level * 50, 0, 0, 100);
+            statusLED.SetStatusColor(level * 30, 0, 0, 100);
             vTaskDelay(250 / portTICK_PERIOD_MS);
         }
     }
