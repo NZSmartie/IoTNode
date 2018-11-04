@@ -143,6 +143,7 @@ typedef void* CoapMessage_t;
 class ICoapResource;
 class ICoapMessage;
 class ICoapOption;
+class ICoapObserver;
 using CoapResource = StackAllocator<ICoapResource, CoapConstraints::MaxResourceSize>;
 using CoapMessage = StackAllocator<ICoapMessage, CoapConstraints::MaxMessageSize>;
 using CoapOption = StackAllocator<ICoapOption, CoapConstraints::MaxOptionSize>;
@@ -152,6 +153,7 @@ using Payload = std::basic_string<uint8_t>;
 class IApplicationResource
 {
 public:
+    virtual void HandleNotify(ICoapObserver const *observer, ICoapMessage *response, CoapResult &result) { result = CoapResult::Error; };
     virtual void HandleRequest(ICoapMessage const *request, ICoapMessage *response, CoapResult &result) { result = CoapResult::Error; };
     virtual ~IApplicationResource() {};
 };
@@ -165,6 +167,7 @@ public:
 
     virtual void Start(CoapResult &result) = 0;
     virtual void CreateResource(CoapResource &resource, IApplicationResource * const applicationResource, const char* uri, CoapResult &result) = 0;
+    virtual void QueueResourceNotification(ICoapResource *resource, CoapResult &result) = 0;
 
     virtual void SetNetworkReady(bool ready) = 0;
 };
@@ -178,6 +181,8 @@ public:
     virtual void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const = 0;
     virtual void AddOption(ICoapOption const *option, CoapResult &result) = 0;
     virtual void AddOption(ICoapOption const &option, CoapResult &result) { this->AddOption(&option, result); }
+    virtual void SetOption(ICoapOption const *option, CoapResult &result) = 0;
+    virtual void SetOption(ICoapOption const &option, CoapResult &result) { this->SetOption(&option, result); }
     virtual CoapMessageCode GetCode() const = 0;
     virtual void SetCode(CoapMessageCode code, CoapResult &result) = 0;
     virtual void GetPayload(Payload &payload, CoapResult &result) const = 0;
@@ -190,6 +195,18 @@ public:
     void SetPayload(const char *something, CoapResult &result) { this->SetPayload(Payload((const uint8_t *)something), result); }
 };
 
+class ICoapObserver
+{
+public:
+    virtual ~ICoapObserver(){}
+
+    virtual void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const = 0;
+    virtual void AddOption(ICoapOption const *option, CoapResult &result) = 0;
+    virtual void AddOption(ICoapOption const &option, CoapResult &result) { this->AddOption(&option, result); }
+
+    virtual int GetFailCount() const = 0;
+};
+
 class ICoapResource
 {
 protected:
@@ -198,6 +215,8 @@ public:
     ICoapResource(IApplicationResource * const applicationResource)
         : applicationResource(applicationResource) {}
     virtual void RegisterHandler(CoapMessageCode requestType, CoapResult &result) = 0;
+    virtual void RegisterAsObservable(CoapResult &result) = 0;
+    virtual void NotifyObservers(CoapResult &result) = 0;
 
     void RegisterHandler(CoapResult &result)
     {

@@ -14,6 +14,7 @@ class LobaroCoap : public ICoapInterface
 {
 private:
     xTaskHandle _task;
+    xQueueHandle _notifyQueue;
     static void TaskHandle(void* pvParameters);
     CoAP_Socket_t *_context;
     struct netconn *_socket;
@@ -28,16 +29,22 @@ public:
     virtual ~LobaroCoap(){}
 
     void CreateResource(CoapResource &resource, IApplicationResource * const applicationResource, const char* uri, CoapResult &result);
+    void QueueResourceNotification(ICoapResource *resource, CoapResult &result);
+
     void SetNetworkReady(bool ready);
 };
 
 class LobaroCoapResource : public ICoapResource
 {
+    friend class LobaroCoap;
+    LobaroCoap * const _coap;
+
     static std::vector<LobaroCoapResource*> _resources;
     CoAP_Res_t *_resource;
     static CoAP_HandlerResult_t ResourceHandler(CoAP_Message_t *request, CoAP_Message_t *response);
+    static CoAP_HandlerResult_t ResourceNotifier(CoAP_Observer_t *observer, CoAP_Message_t *response);
 public:
-    LobaroCoapResource(IApplicationResource * const applicationResource, const char* uri, CoapResult &result);
+    LobaroCoapResource(LobaroCoap * const coap, IApplicationResource * const applicationResource, const char* uri, CoapResult &result);
 
     virtual ~LobaroCoapResource()
     {
@@ -49,6 +56,8 @@ public:
     }
 
     void RegisterHandler(CoapMessageCode requestType, CoapResult &result);
+    void RegisterAsObservable(CoapResult &result);
+    void NotifyObservers(CoapResult &result);
 };
 
 class LobaroCoapMessage : public ICoapMessage
@@ -59,14 +68,28 @@ public:
     LobaroCoapMessage(CoAP_Message_t *message)
         : _message(message) {}
 
-    void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const;
     void AddOption(ICoapOption const *option, CoapResult &result);
+    void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const;
+    void SetOption(ICoapOption const *option, CoapResult &result);
 
     CoapMessageCode GetCode() const;
     void SetCode(CoapMessageCode code, CoapResult &result);
 
     void GetPayload(Payload &payload, CoapResult &result) const;
     void SetPayload(const Payload &payload, CoapResult &result);
+};
+
+class LobaroCoapObserver : public ICoapObserver
+{
+    CoAP_Observer_t * const _observer;
+public:
+    LobaroCoapObserver(CoAP_Observer_t *observer)
+        : _observer(observer) {}
+
+    void GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const;
+    void AddOption(ICoapOption const *option, CoapResult &result);
+
+    int GetFailCount() const;
 };
 
 #endif // _INTERFACES_LOBAROCOAP_H_

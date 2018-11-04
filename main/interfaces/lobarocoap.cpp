@@ -11,6 +11,7 @@
 extern "C" {
     #include "liblobaro_coap.h"
     #include "coap_options.h"
+    #include "coap_resource.h"
     #include "option-types/coap_option_cf.h"
     #include "interface/network/net_Endpoint.h"
 }
@@ -36,6 +37,7 @@ static const int kCoapDefaultTimeUSec = 0;
 static const int kCoapDefaultTimeSec = 5;
 static const int kCoapThreadStackSize = 10240;
 static const int kCoapThreadPriority = 8;
+static const int kNotifyQueueSize = 20;
 
 static uint8_t _coap_memory[kCoapMemorySize];
 static CoAP_Config_t _coap_config = {_coap_memory, kCoapMemorySize};
@@ -68,6 +70,8 @@ std::vector<LobaroCoapResource*> LobaroCoapResource::_resources;
 LobaroCoap::LobaroCoap()
 {
     CoAP_Init(_coap_api, _coap_config);
+
+    _notifyQueue = xQueueCreate(kNotifyQueueSize, sizeof(ICoapResource*));
 }
 
 void LobaroCoap::Start(CoapResult &result)
@@ -234,6 +238,47 @@ struct LobaroResourceMap
 
 LobaroResourceMap *_lobaroResourceMapBase = nullptr;
 
+CoAP_HandlerResult_t LobaroCoapResource::ResourceNotifier(CoAP_Observer_t *observer, CoAP_Message_t *response)
+{
+    LobaroCoapResource *resource = nullptr;
+    // TODO: Loop through all resources
+    // TODO: for each resource, interate through all observers to find a match
+    for (auto it = _resources.begin(); it != _resources.end(); it++)
+    {
+        if((*it)->_resource == nullptr)
+            continue;
+
+        auto curObserver = (*it)->_resource->pListObservers;
+        while (curObserver != nullptr)
+        {
+            if(curObserver == observer)
+            {
+                resource = *it;
+                break;
+            }
+            curObserver = curObserver->next;
+        }
+
+        if(resource != nullptr)
+            break;
+    }
+
+    if (resource == nullptr)
+    {
+        ESP_LOGE( kTag, "lobaro_requesthandler: mapped resource not found!" );
+        response->Code = RESP_INTERNAL_SERVER_ERROR_5_00;
+        return HANDLER_ERROR;
+    }
+
+    CoapResult result;
+    LobaroCoapObserver wrappedObserver(observer);
+    LobaroCoapMessage wrappedResponse(response);
+    resource->applicationResource->HandleNotify(&wrappedObserver, &wrappedResponse, result);// TODO: pass along these parameters (request, response);
+    return result == CoapResult::OK       ? HANDLER_OK :
+	       result == CoapResult::Postpone ? HANDLER_POSTPONE :
+	                                        HANDLER_ERROR;
+}
+
 CoAP_HandlerResult_t LobaroCoapResource::ResourceHandler(CoAP_Message_t *request, CoAP_Message_t *response)
 {
     LobaroCoapResource *resource = nullptr;
@@ -268,7 +313,7 @@ CoAP_HandlerResult_t LobaroCoapResource::ResourceHandler(CoAP_Message_t *request
 }
 void LobaroCoap::CreateResource(CoapResource &resource, IApplicationResource * const applicationResource, const char* uri, CoapResult &result)
 {
-    new (resource.get()) LobaroCoapResource(applicationResource, uri, result);
+    new (resource.get()) LobaroCoapResource(this, applicationResource, uri, result);
 
     if (result != CoapResult::OK)
     {
@@ -276,8 +321,8 @@ void LobaroCoap::CreateResource(CoapResource &resource, IApplicationResource * c
     }
 }
 
-LobaroCoapResource::LobaroCoapResource(IApplicationResource * const applicationResource, const char* uri, CoapResult &result)
-    : ICoapResource(applicationResource)
+LobaroCoapResource::LobaroCoapResource(LobaroCoap * const coap, IApplicationResource * const applicationResource, const char* uri, CoapResult &result)
+    : ICoapResource(applicationResource), _coap(coap)
 {
     assert(sizeof(*this) <= CoapConstraints::MaxResourceSize);
 
@@ -334,6 +379,30 @@ void LobaroCoapResource::RegisterHandler(CoapMessageCode requestType, CoapResult
     result = CoapResult::OK;
 }
 
+void LobaroCoapResource::RegisterAsObservable(CoapResult &result)
+{
+    _resource->Notifier = &LobaroCoapResource::ResourceNotifier;
+    result = CoapResult::OK;
+}
+
+void LobaroCoap::QueueResourceNotification(ICoapResource *resource, CoapResult &result)
+{
+    if(_notifyQueue == nullptr || resource == nullptr)
+    {
+        result = CoapResult::Error;
+        return;
+    }
+
+    ESP_LOGD(kTag, "LobaroCoap: pushing resource to _notifyQueue");
+    xQueueSend(_notifyQueue, &resource, 0);
+}
+
+void LobaroCoapResource::NotifyObservers(CoapResult &result)
+{
+    ESP_LOGD(kTag, "LobaroCoapResource: Queuing resource notification");
+    _coap->QueueResourceNotification(this, result);
+}
+
 // static CoapResult_t coap_resource_set_contnet_type( CoapResource_t resource, uint16_t content_type )
 // {
 //     if( resource == NULL ){
@@ -386,12 +455,20 @@ void LobaroCoapResource::RegisterHandler(CoapMessageCode requestType, CoapResult
 //     return CoAP_GetUintFromOption( pOpt, value ) == COAP_OK ? kCoapOK : kCoapError;
 // }
 
-void LobaroCoapMessage::GetOption(CoapOption &option, const uint16_t number, CoapResult &result) const
+static void _GetOption(CoAP_option_t *optionsList, CoapOption &option, const uint16_t number, CoapResult &result)
 {
+
     CoapOptionType type = CoapOptionType::Empty;
     uint32_t value = 0;
 
-    CoAP_option_t *opt = CoAP_FindOptionByNumber( this->_message, number);
+
+    CoAP_option_t *opt;
+	for (opt = optionsList; opt != nullptr; opt = opt->next)
+    {
+		if (opt->Number == number)
+			break;
+	}
+
     if (opt == nullptr)
     {
         ESP_LOGD(kTag, "LobaroCoapMessage::GetOption: option (%u) not present in coap message", number);
@@ -445,6 +522,19 @@ void LobaroCoapMessage::GetOption(CoapOption &option, const uint16_t number, Coa
     return;
 }
 
+void LobaroCoapMessage::GetOption(CoapOption &option, const uint16_t number, CoapResult &result) const
+{
+    _GetOption(this->_message->pOptionsList, option, number, result);
+}
+
+
+void LobaroCoapObserver::GetOption(CoapOption &option,const uint16_t number, CoapResult &result) const
+{
+    _GetOption(this->_observer->pOptList, option, number, result);
+
+}
+
+
 // static CoapResult_t coap_option_get_next( CoapOption_t* option ){
 //     const CoAP_option_t *pOpt = *option;
 //     uint16_t optionNumber = pOpt->Number;
@@ -465,14 +555,13 @@ void LobaroCoapMessage::GetOption(CoapOption &option, const uint16_t number, Coa
 // {
 //     return CoAP_GetUintFromOption( option, value ) == COAP_OK ? kCoapOK : kCoapError;
 // }
-
-void LobaroCoapMessage::AddOption(ICoapOption const *option, CoapResult &result)
+static void _addOption(CoAP_option_t **optionsList, ICoapOption const *option, CoapResult &result)
 {
     CoAP_Result_t res;
     if (option->Type == CoapOptionType::UInt)
     {
         auto uintOption = static_cast<CoapUIntOption const *>(option);
-        res = CoAP_AppendUintOptionToList(&this->_message->pOptionsList, uintOption->Number, uintOption->Value);
+        res = CoAP_AppendUintOptionToList(optionsList, uintOption->Number, uintOption->Value);
     }
     else
     {
@@ -481,11 +570,33 @@ void LobaroCoapMessage::AddOption(ICoapOption const *option, CoapResult &result)
         opt.Length = option->GetSize();
         opt.Value = (uint8_t*)option->GetPtr();
 
-        res = CoAP_CopyOptionToList( &this->_message->pOptionsList, &opt);
+        res = CoAP_CopyOptionToList( optionsList, &opt);
     }
 
     result = (res == COAP_OK) ? CoapResult::OK : CoapResult::Error;
 }
+
+void LobaroCoapMessage::SetOption(ICoapOption const *option, CoapResult &result)
+{
+    CoAP_option_t *existingOption = CoAP_FindOptionByNumber(_message, option->Number);
+
+    if(existingOption != nullptr)
+        CoAP_RemoveOptionFromList(&_message->pOptionsList, existingOption);
+
+    _addOption(&_message->pOptionsList, option, result);
+}
+
+void LobaroCoapMessage::AddOption(ICoapOption const *option, CoapResult &result)
+{
+    _addOption(&this->_message->pOptionsList, option, result);
+}
+
+
+void LobaroCoapObserver::AddOption(ICoapOption const *option, CoapResult &result)
+{
+    _addOption(&this->_observer->pOptList, option, result);
+}
+
 
 CoapMessageCode LobaroCoapMessage::GetCode() const
 {
@@ -581,7 +692,14 @@ void LobaroCoap::TaskHandle(void *pvParameters)
             if (instance->_context == nullptr)
                 break;
 
-            netconn_set_recvtimeout(instance->_socket, 10);
+            LobaroCoapResource *resourceToNotify = nullptr;
+            if(xQueueReceive(instance->_notifyQueue, &resourceToNotify, 10 / portTICK_PERIOD_MS) && resourceToNotify != nullptr && resourceToNotify->_resource != nullptr)
+            {
+                ESP_LOGD(kTag, "Dequeing resource notification %p->%p", resourceToNotify, resourceToNotify->_resource);
+                CoAP_NotifyResourceObservers(resourceToNotify->_resource);
+            }
+
+            netconn_set_recvtimeout(instance->_socket, 1);
 
             instance->ReadDatagram();
 
@@ -620,4 +738,9 @@ static uint32_t hal_rtc_1Hz_Cnt( void )
         xTimerStart(_timerHandle, 0);
 
     return _seconds;
+}
+
+int LobaroCoapObserver::GetFailCount() const
+{
+    return static_cast<int>(_observer->FailCount);
 }
