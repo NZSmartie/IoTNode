@@ -64,6 +64,7 @@ esp_err_t event_handler(void *ctx, system_event_t *event)
             xEventGroupClearBits( wifi_event_group, kCoapConnectedBit );
             connected = false;
             coap_interface.SetNetworkReady(false);
+            esp_wifi_connect();
             break;
         default:
             break;

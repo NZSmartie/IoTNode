@@ -636,7 +636,7 @@ void LobaroCoapMessage::SetPayload(const Payload &payload, CoapResult &result)
 void LobaroCoap::TaskHandle(void *pvParameters)
 {
     auto instance = static_cast<LobaroCoap *>(pvParameters);
-
+    err_t err;
     while(true)
     {
         if(!instance->_networkReady)
@@ -664,9 +664,10 @@ void LobaroCoap::TaskHandle(void *pvParameters)
             return;
         }
 
-        if (netconn_bind(instance->_socket, nullptr, kCoapPort) != ERR_OK)
+        err = netconn_bind(instance->_socket, nullptr, kCoapPort);
+        if (err != ERR_OK)
         {
-            ESP_LOGE(kTag, "netconn_bind( ... ): Failed");
+            ESP_LOGE(kTag, "netconn_bind( ... ): Failed with %d", err);
             netconn_delete(instance->_socket);
             vTaskDelete(nullptr);
             return;
@@ -705,6 +706,7 @@ void LobaroCoap::TaskHandle(void *pvParameters)
 
             CoAP_doWork();
         }
+        netconn_delete(instance->_socket);
     }
     vTaskDelete(nullptr);
 }
